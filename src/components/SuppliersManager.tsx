@@ -35,9 +35,10 @@ export default function SuppliersManager({
     const newSupplier: Supplier = {
       id: `s${Date.now()}`,
       name,
-      phone: phone || '05XXXXXXXX',
-      email: email || 'supplier@example.com',
-      address: address || 'المملكة العربية السعودية',
+      // الحقول الاختيارية تبقى فارغة إذا لم يُدخلها المستخدم (لا قيم وهمية)
+      phone: phone.trim(),
+      email: email.trim(),
+      address: address.trim(),
       vatNumber: vatNumber || undefined
     };
 
@@ -66,9 +67,9 @@ export default function SuppliersManager({
 
     onUpdateSupplier(editingSupplier.id, {
       name,
-      phone,
-      email,
-      address,
+      phone: phone.trim(),
+      email: email.trim(),
+      address: address.trim(),
       vatNumber: vatNumber || undefined
     });
 
@@ -154,13 +155,15 @@ export default function SuppliersManager({
                 {suppliersTable.visible.map((s) => (
                   <tr key={s.id} data-vkey={s.id} className="hover:bg-white/50 dark:hover:bg-slate-900/50 transition">
                     <td className="p-4 font-bold text-slate-700 dark:text-slate-200">{s.name}</td>
-                    <td className="p-4 font-mono text-slate-600 dark:text-slate-300">{s.phone}</td>
-                    <td className="p-4 text-slate-500 dark:text-slate-400">{s.email}</td>
+                    <td className="p-4 font-mono text-slate-600 dark:text-slate-300">{s.phone?.trim() || <span className="text-slate-300 dark:text-slate-600">—</span>}</td>
+                    <td className="p-4 text-slate-500 dark:text-slate-400">{s.email?.trim() || <span className="text-slate-300 dark:text-slate-600">—</span>}</td>
                     <td className="p-4 text-slate-500 dark:text-slate-400">
-                      <div className="flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400 dark:text-slate-600" />
-                        <span>{s.address}</span>
-                      </div>
+                      {s.address?.trim() ? (
+                        <div className="flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 dark:text-slate-600" />
+                          <span>{s.address}</span>
+                        </div>
+                      ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
                     </td>
                     <td className="p-4 flex justify-center gap-2">
                       <button

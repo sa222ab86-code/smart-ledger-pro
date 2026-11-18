@@ -408,16 +408,25 @@ function Dashboard({ accs, ledger, settings, from, to, periodBar, local, canWrit
       {hint && <div className="text-[11px] text-slate-400 mt-0.5">{hint}</div>}
     </div>
   );
+  /**
+   * الفرق بين المخزون الدفتري والفعلي.
+   * قبل تسجيل أي قيد، سببه أن أرصدة الأصناف الافتتاحية أُدخلت مع الأصناف بلا قيد محاسبي،
+   * فيكون الصحيح قيداً افتتاحياً على «الأرصدة الافتتاحية» لا قيد تسوية على فروقات الجرد.
+   */
+  const isOpeningStock = ledger.length === 0;
   const adjust = () => {
     const amt = Math.abs(invDiff);
-    const inv = roleOf(settings, 'inventory'), adj = roleOf(settings, 'invAdjust');
-    const e = newEntry('adjust');
-    e.memo = `تسوية رصيد المخزون مع الجرد الفعلي (${fmtMoney(stock)})`;
+    const inv = roleOf(settings, 'inventory');
+    const other = roleOf(settings, isOpeningStock ? 'opening' : 'invAdjust');
+    const e = newEntry(isOpeningStock ? 'opening' : 'adjust');
+    e.memo = isOpeningStock
+      ? `رصيد المخزون الافتتاحي (${fmtMoney(stock)})`
+      : `تسوية رصيد المخزون مع الجرد الفعلي (${fmtMoney(stock)})`;
     e.lines = invDiff > 0
-      ? [{ accountId: inv, debit: amt, credit: 0 }, { accountId: adj, debit: 0, credit: amt }]
-      : [{ accountId: adj, debit: amt, credit: 0 }, { accountId: inv, debit: 0, credit: amt }];
+      ? [{ accountId: inv, debit: amt, credit: 0 }, { accountId: other, debit: 0, credit: amt }]
+      : [{ accountId: other, debit: amt, credit: 0 }, { accountId: inv, debit: 0, credit: amt }];
     setEditing({ entry: e, isNew: true });
-    notify('راجع قيد التسوية ثم احفظه');
+    notify(isOpeningStock ? 'راجع القيد الافتتاحي ثم احفظه' : 'راجع قيد التسوية ثم احفظه');
   };
   const recent = ledger.slice(-12).reverse();
   return (
@@ -442,10 +451,17 @@ function Dashboard({ accs, ledger, settings, from, to, periodBar, local, canWrit
           <div className="text-xs text-slate-500 font-bold">المخزون الفعلي (الكمية × التكلفة)</div>
           <div className="text-xl font-black font-mono mt-1" dir="ltr">{fmtMoney(stock)}</div>
           {!readOnlyScope && Math.abs(invDiff) >= 0.01 && (
-            <div className="text-[11px] mt-1 flex items-center justify-between gap-1">
-              <span className="text-amber-600">فرق {fmtMoney(invDiff)}</span>
-              {canWrite && <button className="text-teal-700 dark:text-teal-400 font-bold underline" onClick={adjust}>قيد تسوية</button>}
-            </div>
+            <>
+              <div className="text-[11px] mt-1 flex items-center justify-between gap-1">
+                <span className="text-amber-600">فرق {fmtMoney(invDiff)}</span>
+                {canWrite && <button className="text-teal-700 dark:text-teal-400 font-bold underline" onClick={adjust} data-testid="inv-adjust">{isOpeningStock ? 'قيد افتتاحي' : 'قيد تسوية'}</button>}
+              </div>
+              {isOpeningStock && (
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  أرصدة الأصناف الافتتاحية أُدخلت مع الأصناف بلا قيد محاسبي، فظهر الفرق. سجّل القيد الافتتاحي مرة واحدة ليستقيم المخزون والميزانية.
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
