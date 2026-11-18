@@ -1,0 +1,37 @@
+name: Release
+
+# يعمل عند دفع وسم إصدار مثل: v1.0.1
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # لإنشاء الـ Release ورفع الملفات
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify tag matches package.json version
+        shell: bash
+        run: |
+          V=$(node -p "require('./package.json').version")
+          if [ "v$V" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::الوسم $GITHUB_REF_NAME لا يطابق إصدار package.json (v$V)"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build and publish to GitHub Releases
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

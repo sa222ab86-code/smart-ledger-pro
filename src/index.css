@@ -1,0 +1,358 @@
+@import "tailwindcss";
+
+/* الوضع الداكن يتبع الكلاس .dark (الذي يبدّله زر الإعدادات) وليس إعداد نظام التشغيل */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Segoe UI أولاً للعربية على ويندوز (أوضح من الخط الاحتياطي) و Inter للأرقام اللاتينية */
+  --font-sans: "Tajawal", "Segoe UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  /* ===== هوية «الدفتر الذكي» =====
+     الأخضر البترولي (لون غلاف الدفتر) هو اللون الأساسي، ويحل محل السماوي/الأزرق/النيلي في كل الواجهة.
+     الرمادي الحبري يحل محل slate. ألوان الحالة (أخضر/كهرماني/أحمر/بنفسجي للباقات) كما هي. */
+  --color-cyan-50: #effaf8;
+  --color-cyan-100: #d7f0ec;
+  --color-cyan-200: #b0e0d9;
+  --color-cyan-300: #7fc8bf;
+  --color-cyan-400: #4caba1;
+  --color-cyan-500: #2f8f87;
+  --color-cyan-600: #217470;
+  --color-cyan-700: #1d5d5b;
+  --color-cyan-800: #1a4b4a;
+  --color-cyan-900: #173e3e;
+  --color-cyan-950: #0b2627;
+  --color-blue-50: #effaf8;
+  --color-blue-100: #d7f0ec;
+  --color-blue-200: #b0e0d9;
+  --color-blue-300: #7fc8bf;
+  --color-blue-400: #4caba1;
+  --color-blue-500: #2f8f87;
+  --color-blue-600: #217470;
+  --color-blue-700: #1d5d5b;
+  --color-blue-800: #1a4b4a;
+  --color-blue-900: #173e3e;
+  --color-blue-950: #0b2627;
+  --color-sky-50: #effaf8;
+  --color-sky-100: #d7f0ec;
+  --color-sky-200: #b0e0d9;
+  --color-sky-300: #7fc8bf;
+  --color-sky-400: #4caba1;
+  --color-sky-500: #2f8f87;
+  --color-sky-600: #217470;
+  --color-sky-700: #1d5d5b;
+  --color-sky-800: #1a4b4a;
+  --color-sky-900: #173e3e;
+  --color-sky-950: #0b2627;
+  --color-indigo-50: #effaf8;
+  --color-indigo-100: #d7f0ec;
+  --color-indigo-200: #b0e0d9;
+  --color-indigo-300: #7fc8bf;
+  --color-indigo-400: #4caba1;
+  --color-indigo-500: #2f8f87;
+  --color-indigo-600: #217470;
+  --color-indigo-700: #1d5d5b;
+  --color-indigo-800: #1a4b4a;
+  --color-indigo-900: #173e3e;
+  --color-indigo-950: #0b2627;
+  --color-teal-50: #effaf8;
+  --color-teal-100: #d7f0ec;
+  --color-teal-200: #b0e0d9;
+  --color-teal-300: #7fc8bf;
+  --color-teal-400: #4caba1;
+  --color-teal-500: #2f8f87;
+  --color-teal-600: #217470;
+  --color-teal-700: #1d5d5b;
+  --color-teal-800: #1a4b4a;
+  --color-teal-900: #173e3e;
+  --color-teal-950: #0b2627;
+  --color-slate-50: #f6f8f8;
+  --color-slate-100: #edf1f1;
+  --color-slate-200: #dce3e4;
+  --color-slate-300: #bdc8ca;
+  --color-slate-400: #8d9b9e;
+  --color-slate-500: #66767a;
+  --color-slate-600: #4d5c60;
+  --color-slate-700: #3a474b;
+  --color-slate-800: #263236;
+  --color-slate-900: #182226;
+  --color-slate-950: #0e1518;
+  /* النحاسي: للهوية فقط (الشعار) */
+  --color-brass-400: #d9b76b;
+  --color-brass-500: #b3842d;
+  --color-brass-600: #946a23;
+}
+
+@keyframes scan {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(180px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(0.98); }
+}
+
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes slide-in {
+  0% { transform: translateY(-10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.animate-scan {
+  animation: scan 3s ease-in-out infinite;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 3.5s ease-in-out infinite;
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 2.5s ease-in-out infinite;
+}
+
+.animate-slide-in {
+  animation: slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* تحديد النص وحلقة التركيز بلون الهوية */
+::selection { background: #b0e0d9; color: #0b2627; }
+:focus-visible { outline: 2px solid #2f8f87; outline-offset: 2px; }
+html { background: #f6f8f8; }
+html.dark { background: #0e1518; }
+
+/* حاوية التمرير الأفقي بمقبض علوي (TopScrollX): إخفاء الشريط السفلي */
+.top-scroll-body { scrollbar-width: none; }
+.top-scroll-body::-webkit-scrollbar { display: none; }
+
+/* ===== شاشات اللمس وكل المقاسات =====
+   حجم الخط الأساسي يتدرج مع عرض الشاشة (كل الواجهة بوحدات rem) فتتناسب من 800px حتى الشاشات الكبيرة */
+html { font-size: clamp(13px, calc(0.55vw + 8.5px), 16px); }
+* { -webkit-tap-highlight-color: transparent; }
+button, a, [role="button"], select, label { touch-action: manipulation; }
+@media (pointer: coarse) {
+  ::-webkit-scrollbar { width: 14px; height: 14px; }
+  ::-webkit-scrollbar-thumb { border-radius: 8px; }
+}
+/* وضع اللمس (من إعدادات التطبيق): واجهة أكبر وأزرار أسهل للإصبع */
+html.touch-mode { font-size: clamp(15px, calc(0.6vw + 10px), 18px); }
+html.touch-mode ::-webkit-scrollbar { width: 16px; height: 16px; }
+html.touch-mode button:active { transform: scale(0.97); }
+html.touch-mode input:not([type=checkbox]):not([type=radio]), html.touch-mode select { min-height: 2.5rem; }
+
+/* ===== الشريط العلوي: تدرج أخضر مريح للعين ===== */
+.pos-topbar { background: linear-gradient(90deg, #5bb59f 0%, #3f9d88 45%, #2c8270 100%); border-bottom: 1px solid rgba(44, 130, 112, 0.45); }
+html.dark .pos-topbar { background: #0b1214; border-bottom-color: #26343a; }
+.app-topbar { background: linear-gradient(90deg, #d9efe7 0%, #ecf7f2 55%, #ffffff 100%); border-bottom: 1px solid #cfe7df; }
+html.dark .app-topbar { background: #141c20; border-bottom-color: #26343a; }
+/* عناصر الشريط العلوي لشاشة البيع: شفافة فاتحة فوق التدرج الأخضر بدل الكتل الداكنة */
+html:not(.dark) .pos-topbar :is(.bg-slate-800, .bg-slate-900, .bg-slate-950) { background-color: rgba(255, 255, 255, 0.16) !important; }
+html:not(.dark) .pos-topbar :is(.border-slate-700, .border-slate-600, .border-slate-800) { border-color: rgba(255, 255, 255, 0.3) !important; }
+html:not(.dark) .pos-topbar input { background-color: rgba(255, 255, 255, 0.92) !important; color: #0f2e29 !important; }
+html:not(.dark) .pos-topbar select option { color: #0f172a; }
+html:not(.dark) .pos-topbar :is([class*="text-cyan-"], [class*="text-teal-"], [class*="text-slate-3"], [class*="text-slate-4"]) { color: #ffffff !important; }
+html:not(.dark) .pos-topbar select { color: #ffffff !important; }
+html:not(.dark) .pos-topbar input::placeholder { color: #1f5a4f !important; opacity: 1; font-family: "Tajawal", "Segoe UI", Tahoma, sans-serif; font-weight: 700; letter-spacing: 0; }
+html:not(.dark) .pos-topbar input { border-color: rgba(255, 255, 255, 0.85) !important; }
+
+/* شاشات اللابتوب القصيرة (15.6 بوصة 1366×768): مساحة أكبر لأصناف السلة */
+/* عناصر لوحة الدفع لا تنضغط أبداً (كان الدفع السريع ينضغط حتى يختفي) — السلة فوقها هي التي تتقلص */
+.pos-footer > * { flex-shrink: 0; }
+@media (max-height: 820px) {
+  .pos-footer { gap: 0.4rem !important; padding: 0.5rem !important; }
+  .pos-quickpay { padding: 0.3rem !important; }
+  .pos-quickpay button { height: 2.65rem !important; }
+  .till-display { padding: 0.5rem 0.75rem !important; }
+  .till-display > * + * { margin-top: 0.3rem !important; }
+  .till-display .till-total { font-size: 2rem !important; }
+  .pos-footer .g-pay button, .pos-footer [data-testid="pos-extra-pay"] button { padding-top: 0.55rem !important; padding-bottom: 0.55rem !important; }
+}
+
+/* ===== شاشة البيع: «الرف والصندوق» =====
+   الأصناف كبطاقات أسعار بيضاء على رف أخضر هادئ، والإجمالي كشاشة صندوق داكنة بأرقام ذهبية */
+.price-tag { box-shadow: 0 1px 0 rgba(18, 51, 47, 0.06); }
+.price-tag:hover { border-color: #3f9d88; box-shadow: 0 6px 16px -8px rgba(18, 51, 47, 0.35); }
+.price-tag-amount { color: #1f6f63; }
+html.dark .price-tag-amount { color: #8fd3c2; }
+.shelf-group:hover { border-color: var(--g); box-shadow: 0 8px 18px -10px var(--g); }
+
+.till-display { background: linear-gradient(160deg, #1b4a43 0%, #12332f 100%); color: #cfe5de; border: 1px solid #0d2724; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+.till-display :is(.text-slate-500, .text-slate-600, .text-slate-700, .text-slate-400) { color: #9cc2b8 !important; }
+.till-display :is(.text-slate-800, .text-slate-900) { color: #e7f3ef !important; }
+.till-display :is(.border-slate-200, .border-slate-700\/60, .border-slate-700\/80) { border-color: rgba(207, 229, 222, 0.16) !important; }
+.till-display [class*="text-cyan-"] { color: #8fd3c2 !important; }
+.till-display [class*="text-amber-"] { color: #f4c56a !important; }
+.till-total { color: #f4d48a; text-shadow: 0 0 22px rgba(244, 212, 138, 0.28); letter-spacing: 0.01em; }
+.pos-shelf { background: #e9f2ee; }
+html.dark .pos-shelf { background: #0b1214; }
+
+/* ===== القائمة الجانبية: لوح أخضر داكن يقابل شاشة الصندوق ===== */
+.side-rail { background: linear-gradient(180deg, #17423c 0%, #12332f 100%); color: #cfe5de; border-left: 1px solid #0d2724; }
+html.dark .side-rail { background: #0b1214; border-left-color: #1c2a2e; }
+.side-toggle { color: #9cc2b8; }
+.side-toggle:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
+.side-group-label { color: #7fa79c; }
+.side-sep { height: 1px; background: rgba(207, 229, 222, 0.14); }
+.side-item { color: #cfe5de; }
+.side-item:hover { background: rgba(255, 255, 255, 0.07); color: #ffffff; }
+.side-item .side-icon { color: #8fd3c2; }
+.side-item.is-active { background: rgba(244, 212, 138, 0.13); color: #fff6dc; }
+.side-item.is-active .side-icon { color: #f4d48a; }
+.side-active-bar { background: #f4d48a; }
+.side-foot { border-top: 1px solid rgba(207, 229, 222, 0.14); background: rgba(0, 0, 0, 0.12); }
+.side-avatar { background: #f4d48a; color: #12332f; }
+.side-user { color: #ffffff; }
+.side-role { color: #9cc2b8; }
+.side-logout { background: rgba(244, 114, 94, 0.12); color: #ffb4a6; border: 1px solid rgba(244, 114, 94, 0.25); }
+.side-logout:hover { background: rgba(244, 114, 94, 0.22); color: #ffd3ca; }
+.side-rail nav::-webkit-scrollbar-thumb { background: rgba(207, 229, 222, 0.25); }
+/* مقبض التمرير الأفقي المثبّت أسفل الشاشة (سجل الفواتير) */
+.sticky-hbar { position: sticky; bottom: 0; z-index: 20; background: rgba(255, 255, 255, 0.96); border-top: 1px solid #d6e6e0; border-radius: 0 0 1rem 1rem; padding-bottom: 2px; }
+html.dark .sticky-hbar { background: rgba(14, 21, 24, 0.96); border-top-color: #26343a; }
+.sticky-hbar::-webkit-scrollbar { height: 14px; }
+.sticky-hbar::-webkit-scrollbar-track { background: #e9f2ee; border-radius: 8px; }
+.sticky-hbar::-webkit-scrollbar-thumb { background: #3f9d88; border-radius: 8px; border: 3px solid #e9f2ee; }
+html.touch-mode .sticky-hbar::-webkit-scrollbar { height: 20px; }
+
+/* ===== السلة كإيصال: أسطر بيضاء متجاورة على ورق فاتح، والسطر الجديد يُعلَّم بالذهبي ===== */
+.receipt-paper { background: #f6faf8; }
+html.dark .receipt-paper { background: #0f171a; }
+.receipt-line { background: #ffffff; border-color: #dfeae5; }
+.receipt-line:hover { border-color: #b9d6cc; }
+html.dark .receipt-line { background: #16212a; border-color: #26343a; }
+.receipt-line.is-new { border-color: #d9b45c; box-shadow: inset -4px 0 0 #e8c46e; background: #fffcf2; }
+html.dark .receipt-line.is-new { background: #1d2620; }
+.receipt-num { background: #e3f1ec; color: #1f6f63; }
+html.dark .receipt-num { background: #1c2c30; color: #8fd3c2; }
+.receipt-amount { color: #12332f; }
+html.dark .receipt-amount { color: #f4d48a; }
+/* إبراز الإعداد الذي وصل إليه البحث */
+.setting-flash { animation: setting-flash 1.8s ease; }
+@keyframes setting-flash { 0%, 60% { box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.55); } 100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0); } }
+/* الإيصال الحراري: كل النصوص سوداء صريحة (الرمادي يطبع باهتاً على الطابعات الحرارية) */
+.thermal-receipt, .thermal-receipt * { color: #000 !important; }
+.thermal-receipt .font-mono { font-weight: 700; }
+/* خط عربي موحّد في الإيصال: وزن واحد (Bold) — الوزن الأثقل Black كان يبدو كخط مختلف في الشروط والبنك والعناوين */
+.thermal-receipt, .thermal-receipt * { font-weight: 700 !important; }
+
+@layer components {
+/* ---- الشريط العلوي لنقطة البيع: كبسولات موحّدة بإطار أخضر ---- */
+.pos-pill { height: 2.5rem; display: inline-flex; align-items: center; gap: .4rem; padding: 0 .8rem; border-radius: 9999px; border: 2px solid #10b981; background: rgba(2, 24, 20, .38); color: #fff; font-size: .75rem; font-weight: 900; white-space: nowrap; flex-shrink: 0; transition: background-color .15s, transform .1s, box-shadow .15s; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 2px 8px rgba(0, 0, 0, .14); cursor: pointer; }
+button.pos-pill:hover, .pos-pill > button:hover { background-color: rgba(16, 185, 129, .22); }
+button.pos-pill:active { transform: scale(.96); }
+.pos-pill:disabled { opacity: .45; cursor: not-allowed; }
+[data-testid=cart-bar] .pos-pill { padding: 0 .75rem; gap: .35rem; }
+html.touch-mode .touch-gap { gap: .75rem; }
+.pos-pill-input { height: 2.5rem; }
+.pos-pill-glow { animation: pos-glow 2.2s ease-in-out infinite; }
+@keyframes pos-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, .0), inset 0 1px 0 rgba(255,255,255,.14); } 50% { box-shadow: 0 0 0 4px rgba(251, 191, 36, .28), inset 0 1px 0 rgba(255,255,255,.14); } }
+.pos-pill-brand { background: linear-gradient(135deg, rgba(16, 185, 129, .55), rgba(6, 95, 70, .55)); cursor: default; }
+.pos-pill-badge { min-width: 1.2rem; height: 1.2rem; padding: 0 .35rem; border-radius: 9999px; background: #fbbf24; color: #0f172a; font: 900 10.5px/1.2rem ui-monospace, monospace; text-align: center; display: inline-block; }
+html:not(.dark) .pos-pill { border-color: #bbf7d0; background-color: rgba(255, 255, 255, .14); }
+html:not(.dark) .pos-pill-brand { background: linear-gradient(135deg, rgba(255, 255, 255, .28), rgba(255, 255, 255, .1)); }
+.pos-pill-input { height: 2.5rem; border-radius: 9999px; border: 2px solid #10b981; background: rgba(2, 24, 20, .38); color: #fff; }
+.pos-pill-input::placeholder { color: rgba(255, 255, 255, .7); }
+html:not(.dark) .pos-topbar input.pos-pill-input { background-color: rgba(255, 255, 255, .14) !important; color: #fff !important; border-color: #bbf7d0 !important; }
+html:not(.dark) .pos-topbar input.pos-pill-input::placeholder { color: rgba(255, 255, 255, .85) !important; }
+/* حقل الباركود: أصغر، ونصه ذهبي */
+.pos-gold-input { border: 2px solid #10b981; border-radius: 9999px; background: rgba(2, 24, 20, .55); color: #fcd34d; }
+.pos-gold-input::placeholder { color: #fcd34d; opacity: .85; }
+html:not(.dark) .pos-topbar input.pos-gold-input { background-color: rgba(4, 47, 40, .55) !important; color: #fde68a !important; border-color: #bbf7d0 !important; }
+html:not(.dark) .pos-topbar input.pos-gold-input::placeholder { color: #fde68a !important; }
+}
+
+/* شاشة الدخول في وضع اللمس: بطاقة أكثر إحكاماً كي تظهر لوحة المفاتيح كاملة */
+html.touch-mode .login-card { padding: 1.25rem 1.5rem; }
+html.touch-mode .login-card .login-main > :not(:last-child) { margin-bottom: 1rem !important; }
+html.touch-mode .login-card img { width: 3rem; height: 3rem; }
+/* لوحة المفاتيح ظاهرة على شاشة عريضة: الحقول يميناً واللوحة يساراً */
+@media (min-width: 900px) {
+  .login-card.osk-on { max-width: 58rem; }
+  .login-card.osk-on .login-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; align-items: center; }
+  .login-card.osk-on .login-kbd { margin-top: 0; }
+}
+
+/* الواجهة الإنجليزية (اتجاه من اليسار): النص المحاذى «لليمين» في التصميم العربي يعني بداية السطر */
+html[lang="en"] .text-right { text-align: left; }
+html[lang="en"] [translate="no"] .text-right, html[lang="en"] #printable-invoice-body .text-right { text-align: right; }
+
+/* شاشة البقالة (بالقائمة): جدول السلة عريض + عمود جانبي فيه البحث والإجماليات والدفع */
+/* عمود الإجماليات في نفس جهة السلة في الشاشة العادية — فلا تنعكس الإجماليات عند التبديل لبطاقات الأصناف */
+.grocery-pos { display: grid !important; grid-template-columns: 31rem minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "tools list" "dock list"; }
+.grocery-pos.rev { grid-template-columns: minmax(0, 1fr) 31rem; grid-template-areas: "list tools" "list dock"; }
+.grocery-pos .g-contents { display: contents; }
+.grocery-pos .g-list { grid-area: list; min-height: 0; background: var(--color-white, #fff); }
+html.dark .grocery-pos .g-list { background: #0f172a; }
+.grocery-pos .g-tools { grid-area: tools; margin: .5rem; }
+.grocery-pos .g-dock { grid-area: dock; min-height: 0; overflow-y: auto; border-top: 0; border-inline-end: 1px solid rgb(226 232 240); }
+.grocery-pos.rev .g-dock { border-inline-end: 0; border-inline-start: 1px solid rgb(226 232 240); }
+html.dark .grocery-pos .g-dock { border-inline-color: rgb(30 41 59); }
+html.touch-mode .grocery-pos { grid-template-columns: 34rem minmax(0, 1fr); }
+html.touch-mode .grocery-pos.rev { grid-template-columns: minmax(0, 1fr) 34rem; }
+/* شاشة البقالة: العمود الجانبي يمتد لأسفل الشاشة — أزرار الدفع في الأسفل وأكبر */
+.grocery-pos .g-dock { gap: .75rem; padding-bottom: .75rem; }
+.grocery-pos .g-pay { margin-top: auto; }
+.grocery-pos .till-display { padding: 1.1rem 1rem; }
+.grocery-pos .till-display .till-total { padding-block: .4rem; }
+.grocery-pos .pos-quickpay { padding: .75rem; }
+.grocery-pos .pos-quickpay button { height: 3.75rem; }
+.grocery-pos .g-pay button { padding-block: 1.15rem; font-size: 1.1rem; }
+.grocery-pos [data-testid="pos-extra-pay"] button { padding-block: .9rem; }
+.grocery-pos .till-total { font-size: 3.4rem; }
+
+/* شاشة البقالة: صف الأزرار (شاشة القائمة · صنف جديد · الكل) ثم حقل البحث بعرض كامل تحته */
+.grocery-pos .g-tools { justify-content: flex-start; }
+.grocery-pos .g-tools .g-search { order: 10; flex: 1 0 100%; max-width: none; }
+.grocery-pos .g-tools .g-search input { padding-top: .5rem; padding-bottom: .5rem; font-size: .85rem; }
+.grocery-pos .g-tools .g-search > svg { top: .7rem; }
+/* القائمة الجانبية يساراً: الحد الفاصل على جهتها اليمنى */
+[data-sidebar-side="left"] > .side-rail { border-left: 0; border-right: 1px solid #0d2724; }
+html.dark [data-sidebar-side="left"] > .side-rail { border-right-color: #1c2a2e; }
+
+/* الباركود على الشاشة: خطوط بعدد صحيح من البكسلات (utils/barcodeSnap) — الطباعة بالمقاس بالمم */
+@media screen { [data-bc-modules][style*="--bcw"] { width: var(--bcw) !important; max-width: none !important; } }
+
+/* الطباعة وPDF دائماً بخلفية بيضاء حتى في الوضع الداكن (هوامش الصفحة كانت تظهر إطاراً داكناً) */
+@media print { html, html.dark, body { color-scheme: light !important; background: #fff !important; } }
+
+/* جداول بتمرير افتراضي داخل إطار ثابت (سجل المبيعات): أشرطة تمرير واضحة أفقياً وعمودياً */
+.vlist-scroll { scrollbar-gutter: stable; }
+.vlist-scroll::-webkit-scrollbar { width: 12px; height: 12px; }
+.vlist-scroll::-webkit-scrollbar-track { background: #e9f2ee; }
+.vlist-scroll::-webkit-scrollbar-thumb { background: #3f9d88; border-radius: 8px; border: 3px solid #e9f2ee; min-height: 48px; min-width: 48px; }
+.vlist-scroll::-webkit-scrollbar-corner { background: #e9f2ee; }
+html.dark .vlist-scroll::-webkit-scrollbar-track, html.dark .vlist-scroll::-webkit-scrollbar-corner { background: #0e1518; }
+html.dark .vlist-scroll::-webkit-scrollbar-thumb { border-color: #0e1518; }
+html.touch-mode .vlist-scroll::-webkit-scrollbar { width: 20px; height: 20px; }
+
+/* طباعة مباشرة بلا معاينة: الفاتورة مرسومة (تُنسخ منها صورة الإيصال / تُطبع) لكنها غير مرئية على الشاشة
+   ولا تعترض النقر — الطباعة نفسها (@media print) لا تتأثر */
+@media screen {
+  .print-ghost { opacity: 0 !important; pointer-events: none !important; backdrop-filter: none !important; }
+}
+
+/* شاشات صغيرة/مربعة (1024×768 و1280×1024): عمود الدفع أضيق، أرقام أصغر قليلاً، واسم الصنف يلتف لسطرين
+   بدل قصّه — فتظهر الأصناف كاملة بلا حاجة لتصغير ويندوز */
+@media screen and (max-width: 1280px) {
+  .grocery-pos { grid-template-columns: 23rem minmax(0, 1fr); }
+  .grocery-pos.rev { grid-template-columns: minmax(0, 1fr) 23rem; }
+  html.touch-mode .grocery-pos { grid-template-columns: 25rem minmax(0, 1fr); }
+  html.touch-mode .grocery-pos.rev { grid-template-columns: minmax(0, 1fr) 25rem; }
+  .grocery-pos .till-display { padding: .8rem .85rem; }
+  .grocery-pos .till-total { font-size: 2.6rem; }
+  .grocery-pos .pos-quickpay { padding: .5rem; }
+  .grocery-pos .pos-quickpay button { height: 3.1rem; }
+  .grocery-pos .g-pay button { padding-block: .9rem; font-size: 1rem; }
+  .grocery-pos .g-list .g-grid { grid-template-columns: 1.6rem minmax(0,1fr) 8.25rem 5.25rem 5.5rem 2.4rem !important; gap: .4rem; padding-inline: .5rem; }
+  .grocery-pos .g-list .g-grid.g-vat { grid-template-columns: 1.6rem minmax(0,1fr) 8.25rem 5.25rem 4.25rem 5.5rem 2.4rem !important; }
+  .grocery-pos .g-name { white-space: normal; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25rem; font-size: 14px; }
+  .grocery-pos .g-btn-label { display: none; }
+}
+@media screen and (max-height: 800px) {
+  .grocery-pos .g-dock { gap: .5rem; padding-bottom: .5rem; }
+  .grocery-pos .till-total { font-size: 2.4rem; }
+}

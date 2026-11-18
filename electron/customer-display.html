@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'">
+<title>شاشة العميل</title>
+<style id="font"></style>
+<style>
+  :root { --petrol: #0f3b3a; --petrol-2: #155e5b; --gold: #f2c14e; --paper: #fbfaf6; --ink: #1d2626; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--petrol); color: var(--ink); font-family: Tajawal, Tahoma, Arial, sans-serif; overflow: hidden; user-select: none; cursor: none; }
+  .wrap { display: grid; grid-template-columns: 1.35fr 1fr; height: 100vh; }
+  .list { background: var(--paper); display: flex; flex-direction: column; min-height: 0; }
+  .brand { display: flex; align-items: center; gap: 2vh; padding: 2.4vh 3vw; border-bottom: 2px dashed #d8d3c4; }
+  .brand img { height: 7vh; max-width: 14vw; object-fit: contain; }
+  .brand h1 { margin: 0; font-size: 3.4vh; font-weight: 900; color: var(--petrol); }
+  .items { flex: 1; min-height: 0; overflow: hidden; padding: 1vh 3vw; display: flex; flex-direction: column; justify-content: flex-end; }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 1vw; padding: 1.4vh 0; border-bottom: 1px dotted #c9c3b2; font-size: 2.7vh; animation: in .35s ease; }
+  .row .n { font-weight: 800; }
+  .row .d { font-size: 2vh; color: #5d6b6b; margin-top: .3vh; }
+  .row .t { font-weight: 900; direction: ltr; text-align: left; white-space: nowrap; }
+  .row.last { background: linear-gradient(90deg, transparent, #fff3cf); }
+  .side { background: linear-gradient(160deg, var(--petrol-2), var(--petrol)); color: #fff; display: flex; flex-direction: column; justify-content: center; padding: 5vh 3vw; gap: 2.4vh; }
+  .kv { display: flex; justify-content: space-between; font-size: 2.6vh; opacity: .9; }
+  .kv b { direction: ltr; }
+  .total { margin-top: 2vh; padding: 3vh 2vw; border-radius: 2vh; background: rgba(0,0,0,.28); text-align: center; }
+  .total .l { font-size: 2.6vh; opacity: .85; }
+  .total .v { font-size: 10vh; font-weight: 900; color: var(--gold); line-height: 1.1; direction: ltr; }
+  .total .c { font-size: 2.4vh; opacity: .8; }
+  .idle { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 3vh; background: radial-gradient(circle at 50% 40%, var(--petrol-2), var(--petrol)); color: #fff; text-align: center; }
+  .idle img { max-height: 26vh; max-width: 50vw; object-fit: contain; }
+  .idle h1 { margin: 0; font-size: 6vh; font-weight: 900; }
+  .idle p { margin: 0; font-size: 3.2vh; opacity: .85; }
+  .paid { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 2.5vh; background: var(--petrol); color: #fff; text-align: center; }
+  .paid h1 { margin: 0; font-size: 7vh; font-weight: 900; color: var(--gold); }
+  .paid .g { display: grid; grid-template-columns: repeat(3, auto); gap: 3vw; font-size: 3vh; }
+  .paid .g b { display: block; font-size: 6vh; direction: ltr; }
+  .empty { color: #8b9696; text-align: center; font-size: 3vh; padding: 6vh 0; }
+  body.s-idle .idle, body.s-paid .paid { display: flex; }
+  @keyframes in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body class="s-idle">
+  <div class="wrap">
+    <section class="list">
+      <div class="brand"><img id="logo" alt="" hidden><h1 id="co"></h1></div>
+      <div class="items" id="items"></div>
+    </section>
+    <aside class="side">
+      <div class="kv"><span>عدد الأصناف</span><b id="count">0</b></div>
+      <div class="kv"><span>المجموع قبل الضريبة</span><b id="sub">0.00</b></div>
+      <div class="kv" id="discRow" hidden><span>الخصم</span><b id="disc">0.00</b></div>
+      <div class="kv"><span>ضريبة القيمة المضافة</span><b id="vat">0.00</b></div>
+      <div class="total"><div class="l">الإجمالي المستحق</div><div class="v" id="total">0.00</div><div class="c" id="cur">ر.س</div></div>
+    </aside>
+  </div>
+  <div class="idle"><img id="idleLogo" alt="" hidden><h1 id="idleCo"></h1><p id="msg">أهلاً وسهلاً بكم</p></div>
+  <div class="paid">
+    <h1>شكراً لزيارتكم</h1>
+    <div class="g">
+      <div>الإجمالي<b id="pTotal">0.00</b></div>
+      <div>المدفوع<b id="pPaid">0.00</b></div>
+      <div>الباقي<b id="pChange">0.00</b></div>
+    </div>
+  </div>
+  <script src="customer-display.js"></script>
+</body>
+</html>

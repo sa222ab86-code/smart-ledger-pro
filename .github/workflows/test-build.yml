@@ -1,0 +1,54 @@
+name: Test build (Windows)
+
+# بناء تجريبي فقط: لا ينشر إصداراً ولا يصل للعملاء.
+# يعمل عند الدفع لأي فرع غير main، أو يدوياً من تبويب Actions.
+on:
+  push:
+    branches-ignore:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Tests
+        run: npm test
+
+      - name: Type check
+        run: npm run lint
+
+      # المفتاح العام الحقيقي ليس في المستودع: يُنشأ مفتاح مؤقت لاختبار البناء فقط.
+      # المثبّت الناتج لا يقبل تراخيص العملاء الحقيقية — للتجربة فقط، لا يُوزّع.
+      - name: Temporary license key (only if the real public key is missing)
+        shell: bash
+        run: |
+          if [ ! -f electron/license-public.pem ]; then
+            echo "::warning::electron/license-public.pem غير موجود — بناء بمفتاح مؤقت (لا يقبل تراخيص العملاء)"
+            export SL_LICENSE_DIR="$RUNNER_TEMP/license"
+            node tools/license/keygen.cjs
+          fi
+
+      - name: Build installer (no publish)
+        run: npm run dist
+        env:
+          SL_LICENSE_DIR: ${{ runner.temp }}/license
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartLedgerPro-TEST-ONLY-not-for-customers
+          path: release/*.exe
+          retention-days: 7

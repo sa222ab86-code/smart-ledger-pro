@@ -1,0 +1,16 @@
+node_modules/
+dist/
+release/
+coverage/
+.DS_Store
+*.log
+*.db
+*.db-wal
+*.db-shm
+.env*
+
+# License signing keys (private key is never in the repo)
+*.private.pem
+private.pem
+electron/license-public.pem
+electron/license.protected.cjs

@@ -1,0 +1,119 @@
+{
+  "name": "smart-ledger-pro",
+  "productName": "Smart Ledger Pro",
+  "version": "1.0.1",
+  "description": "الدفتر الذكي Pro - نقاط البيع والفواتير والمحاسبة الكاملة وربط الفروع",
+  "author": "sa222ab86-code",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sa222ab86-code/smart-ledger-pro.git"
+  },
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k -n vite,electron \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "web": "vite",
+    "build": "vite build",
+    "dist": "vite build && node scripts/protect.cjs && electron-builder --win --publish never",
+    "release": "node scripts/ensure-release-repos.cjs && vite build && node scripts/protect.cjs && electron-builder --win --publish always && node scripts/publish-release.cjs",
+    "lint": "tsc --noEmit",
+    "postinstall": "electron-builder install-app-deps",
+    "protect": "node scripts/protect.cjs",
+    "test": "node --no-warnings tests/run-all.cjs"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.2.5",
+    "@fontsource/jetbrains-mono": "^5.2.5",
+    "@fontsource/tajawal": "^5.3.0",
+    "better-sqlite3": "^12.2.0",
+    "electron-updater": "^6.6.2",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1"
+  },
+  "devDependencies": {
+    "@electron/fuses": "^1.8.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/node": "^22.14.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "javascript-obfuscator": "^4.1.1",
+    "tailwindcss": "^4.1.14",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.3",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.smartledger.pro",
+    "productName": "Smart Ledger Pro",
+    "artifactName": "SmartLedgerPro-Setup-${version}.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "build/icon.png",
+      "package.json",
+      "!electron/license.cjs",
+      "!electron/license-public.pem",
+      "!**/private.pem",
+      "!**/*.private.pem",
+      "!**/*.keystore"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "الدفتر الذكي Pro",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "sa222ab86-code",
+        "repo": "smart-ledger-pro",
+        "releaseType": "draft"
+      }
+    ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": true
+    }
+  }
+}
