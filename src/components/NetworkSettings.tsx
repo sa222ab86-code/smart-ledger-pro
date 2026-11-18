@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { Network, Server, MonitorSmartphone, Laptop, Search, Copy, RefreshCw, CheckCircle2, AlertTriangle, Loader2, Wifi, WifiOff } from 'lucide-react';
 import type { NetInfo } from '../storage/persistence';
 import { flushNow } from '../storage/persistence';

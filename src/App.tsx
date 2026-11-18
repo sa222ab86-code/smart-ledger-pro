@@ -1511,7 +1511,7 @@ export default function App() {
     businessType === 'retail' && retailPrintTemplate !== 'thermal80' ? 'A4' : 'thermal80';
 
   /** ما يحدث تلقائياً عند فتح معاينة فاتورة: طباعة، حفظ PDF، أو معاينة فقط */
-  const printIntentRef = useRef<'print' | 'pdf' | 'preview'>('print');
+  const printIntentRef = useRef<'print' | 'pdf' | 'preview' | 'direct'>('print');
   /** طباعة مباشرة بلا معاينة: الفاتورة تُرسم (لازمة للطباعة) لكنها مخفية عن الشاشة — لا وميض للمعاينة.
    *  إن فشلت الطباعة تظهر المعاينة ليُعيد المستخدم المحاولة. */
   const [printGhost, setPrintGhost] = useState(false);

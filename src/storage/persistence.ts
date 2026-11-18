@@ -251,7 +251,7 @@ export interface BranchesInfo {
   branches?: BranchRow[];
   branch?: { host: string; port: number; id: string; name: string; code: string; hqName: string; sync: BranchSyncStatus | null };
 }
-type Res<T = object> = Promise<({ ok: true } & T) | { ok: false; error?: string }>;
+type Res<T = object> = Promise<({ ok: true; error?: undefined } & T) | { ok: false; error?: string }>;
 export interface BranchesApi {
   info(): Promise<BranchesInfo>;
   configure(input: { mode?: BranchMode; publicHost?: string; port?: number; hqName?: string; intervalSec?: number }): Promise<{ ok: boolean; error?: string; needsRestart?: boolean }>;
