@@ -9,8 +9,8 @@ coverage/
 *.db-shm
 .env*
 
-# License signing keys (private key is never in the repo)
+# License signing keys: the PRIVATE key is never in the repo.
+# electron/license-public.pem and electron/license-key-id.txt ARE committed (needed by CI builds).
 *.private.pem
 private.pem
-electron/license-public.pem
 electron/license.protected.cjs

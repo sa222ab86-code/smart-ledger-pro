@@ -6,8 +6,9 @@ on:
     tags:
       - 'v*'
 
+# النشر في مستودع آخر (smart-ledger-pro-releases) — GITHUB_TOKEN لا يكفي، يُستعمل سرّ RELEASES_TOKEN
 permissions:
-  contents: write   # لإنشاء الـ Release ورفع الملفات
+  contents: read
 
 jobs:
   release:
@@ -28,10 +29,24 @@ jobs:
             exit 1
           fi
 
+      - name: Check release prerequisites
+        shell: bash
+        env:
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          if [ -z "$RELEASES_TOKEN" ]; then
+            echo "::error::السرّ RELEASES_TOKEN غير موجود — أضفه من Settings > Secrets and variables > Actions (توكن بصلاحية Contents: Read and write على smart-ledger-pro-releases)"
+            exit 1
+          fi
+          if [ ! -f electron/license-public.pem ] || [ ! -f electron/license-key-id.txt ]; then
+            echo "::error::المفتاح العام أو بصمته غير موجودين في المستودع (electron/license-public.pem و electron/license-key-id.txt) — بدونهما لا تُقبل تراخيص العملاء"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm install
 
       - name: Build and publish to GitHub Releases
         run: npm run release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}

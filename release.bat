@@ -37,7 +37,7 @@ echo.
 if defined GH_TOKEN goto have_token
 echo Paste your GitHub token then press Enter.
 echo The token is used only inside this window and is NOT saved on disk.
-echo Fine-grained token: Contents = Read and write on smart-ledger-pro
+echo Fine-grained token: Contents = Read and write on smart-ledger-pro-releases
 echo [the repository that installed copies read their updates from]
 echo.
 set /p GH_TOKEN=Token: 
@@ -87,7 +87,7 @@ echo ===================================================================
 echo [ERROR] Release failed. Common reasons:
 echo ===================================================================
 echo 1. Token wrong, expired, or without "Contents: Read and write" on
-echo    smart-ledger-pro [401 or 403].
+echo    smart-ledger-pro-releases [401 or 403].
 echo 2. Repository name or owner in package.json does not match GitHub.
 echo 3. A release with the same version already exists on GitHub: raise the
 echo    version number in package.json and run again.
@@ -108,5 +108,5 @@ echo [or via the menu: Help - Check for updates].
 echo.
 echo Press any key to open the releases page...
 pause > nul
-start https://github.com/sa222ab86-code/smart-ledger-pro/releases
+start https://github.com/sa222ab86-code/smart-ledger-pro-releases/releases
 exit /b

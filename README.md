@@ -2,7 +2,7 @@
 
 نظام نقاط بيع وفواتير ومحاسبة (React + Vite) داخل تطبيق سطح مكتب (Electron)،
 بياناته في **SQLite** محلية (better-sqlite3)، وتحديثاته تأتي تلقائياً من **GitHub Releases**
-في المستودع [`sa222ab86-code/smart-ledger-pro`](https://github.com/sa222ab86-code/smart-ledger-pro).
+في المستودع العام [`sa222ab86-code/smart-ledger-pro-releases`](https://github.com/sa222ab86-code/smart-ledger-pro-releases).
 
 ## الجديد في Pro 1.0.1
 
@@ -52,14 +52,16 @@
 
 ## قبل أي شيء (مرة واحدة)
 
-### مستودع GitHub
+### مستودعا GitHub
 | المستودع | المحتوى |
 |---|---|
-| [`sa222ab86-code/smart-ledger-pro`](https://github.com/sa222ab86-code/smart-ledger-pro.git) | الكود المصدري + الإصدارات (Releases) التي يقرأ منها البرنامج التحديثات |
+| [`sa222ab86-code/smart-ledger-pro`](https://github.com/sa222ab86-code/smart-ledger-pro) | الكود المصدري فقط (يمكن جعله خاصاً) |
+| [`sa222ab86-code/smart-ledger-pro-releases`](https://github.com/sa222ab86-code/smart-ledger-pro-releases) | الإصدارات (Releases) التي يقرأ منها البرنامج التحديثات — **يجب أن يبقى عاماً** |
 
-- `build.publish[0]` = هذا المستودع (هو ما يُكتب في `app-update.yml` داخل البرنامج).
-- **التحديث التلقائي يحتاج أن تكون صفحة الإصدارات عامة:** اجعل المستودع **عاماً**، أو أبقِ الكود في مستودع خاص وانشر الإصدارات في مستودع عام وغيّر `build.publish` إليه.
-- التوكن (Fine-grained): صلاحية **Contents: Read and write** على `smart-ledger-pro`، ويُدخل في نافذة `release.bat` فقط ولا يُحفظ. (GitHub Actions يستعمل `GITHUB_TOKEN` تلقائياً لأن النشر في نفس المستودع.)
+- `build.publish[0]` = مستودع التحديثات (هو ما يُكتب في `app-update.yml` داخل البرنامج).
+- التوكن (Fine-grained): صلاحية **Contents: Read and write** على `smart-ledger-pro-releases`، ويُدخل في نافذة `release.bat` فقط ولا يُحفظ.
+- **GitHub Actions:** `GITHUB_TOKEN` لا يكتب إلا في مستودع الكود، لذلك يحتاج النشر سرّاً باسم `RELEASES_TOKEN` (نفس نوع التوكن أعلاه) في
+  مستودع الكود: Settings ← Secrets and variables ← Actions ← New repository secret.
 - المستودع الفارغ يُهيَّأ تلقائياً (README) قبل البناء عبر `scripts/ensure-release-repos.cjs`.
 
 ## التطوير
