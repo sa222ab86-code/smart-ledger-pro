@@ -319,6 +319,32 @@ export const getNetInfo = () => netInfo;
  */
 let branchCode = '';
 export const getBranchCode = () => branchCode;
+
+/** المجموعات التي يرفعها الفرع ويقرأها المركز في تقاريره الموحّدة */
+export const BRANCH_REPORT_COLLECTIONS = ['invoices', 'products', 'purchases', 'purchaseReturns', 'cashMovements', 'zReports'] as const;
+export interface BranchBundle {
+  invoices: unknown[]; products: unknown[]; purchases: unknown[];
+  purchaseReturns: unknown[]; cashMovements: unknown[]; zReports: unknown[];
+}
+/** فروع هذا المركز (فارغة لغير المركز) — لمحدّد النطاق في التقارير */
+export async function hqBranches(): Promise<{ id: string; code: string; name: string }[]> {
+  if (!window.ledger?.branches) return [];
+  try {
+    const i = await window.ledger.branches.info();
+    if (i.mode !== 'hq' || !Array.isArray(i.branches)) return [];
+    return i.branches.map((b) => ({ id: b.id, code: b.code, name: b.name }));
+  } catch { return []; }
+}
+/** بيانات فرع كما رفعها — تُقرأ عند الطلب فقط كي لا تثقل فتح البرنامج */
+export async function hqBranchData(id: string): Promise<BranchBundle> {
+  const empty: BranchBundle = { invoices: [], products: [], purchases: [], purchaseReturns: [], cashMovements: [], zReports: [] };
+  if (!window.ledger?.branches) return empty;
+  try {
+    const d = await window.ledger.branches.data(id, [...BRANCH_REPORT_COLLECTIONS]);
+    const take = (k: string) => (Array.isArray(d?.[k]) ? (d[k] as unknown[]) : []);
+    return { invoices: take('invoices'), products: take('products'), purchases: take('purchases'), purchaseReturns: take('purchaseReturns'), cashMovements: take('cashMovements'), zReports: take('zReports') };
+  } catch { return empty; }
+}
 /** آخر قيمة معروفة من الجهاز الرئيسي لكل مفتاح kv — تُرسل مع التعديل للدمج الثلاثي */
 const kvBase = new Map<string, unknown>();
 const pending = new Map<string, Pending>();

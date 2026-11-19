@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState, type ReactNode } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from 'react';
 import DateField from './DateField';
 import { BarChart3, Monitor, Calendar, FileText, UserCircle, Banknote, Printer, FileDown, FileSpreadsheet, FileBox, Loader2, TrendingUp, Package, Layers, Undo2, BadgePercent, Users, Boxes, Snowflake, Truck, Receipt, TrendingDown, Search, X, Wallet, ArrowDownUp, Scale } from 'lucide-react';
 import { customerLabel } from '../utils/invoiceMath';
@@ -8,6 +8,8 @@ import { usePagedList, Pagination } from '../utils/usePagedList';
 import type { ZClosing } from '../utils/reports';
 import { buildReport, CUSTOMER_KINDS, SUPPLIER_KINDS, reportLandscape, reportToCsv, reportToHtml, type ReportKind } from '../utils/reports';
 import { saveTextFile, todayStamp } from '../utils/files';
+import { hqBranches, hqBranchData, type BranchBundle } from '../storage/persistence';
+import { Building2, GitBranch } from 'lucide-react';
 import { exportHtmlAsPdf, printHtmlDocument, type PrintSettings } from '../utils/printing';
 
 interface Props {
@@ -72,7 +74,46 @@ const monthEnd = () => { const n = new Date(); return ymd(new Date(n.getFullYear
 const prevMonthStart = () => { const n = new Date(); return ymd(new Date(n.getFullYear(), n.getMonth() - 1, 1)); };
 const prevMonthEnd = () => { const n = new Date(); return ymd(new Date(n.getFullYear(), n.getMonth(), 0)); };
 
-export default function ReportsView({ invoices, purchases = [], purchaseReturns = [], products = [], groups = [], customers = [], company, printSettings, notify, tobaccoEnabled, cashMovements = [], zReports = [] }: Props) {
+export default function ReportsView({ invoices: hqInvoices, purchases: hqPurchases = [], purchaseReturns: hqPurchaseReturns = [], products: hqProducts = [], groups = [], customers = [], company, printSettings, notify, tobaccoEnabled, cashMovements: hqCashMovements = [], zReports: hqZReports = [] }: Props) {
+  // ---- نطاق التقرير: المركز وحده، أو فرع، أو الكل مجمّعاً ----
+  // بيانات الفروع تُقرأ عند اختيار النطاق فقط، فلا تثقل فتح الشاشة.
+  const [branches, setBranches] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [scope, setScope] = useState<string>('hq');
+  const [bundles, setBundles] = useState<Record<string, BranchBundle>>({});
+  const [scopeBusy, setScopeBusy] = useState(false);
+  useEffect(() => { let on = true; void hqBranches().then((b) => { if (on) setBranches(b); }); return () => { on = false; }; }, []);
+  useEffect(() => {
+    const need = (scope === 'all' ? branches.map((b) => b.id) : scope === 'hq' ? [] : [scope]).filter((id) => !bundles[id]);
+    if (!need.length) return;
+    let on = true;
+    setScopeBusy(true);
+    void Promise.all(need.map(async (id) => [id, await hqBranchData(id)] as const))
+      .then((pairs) => { if (on) setBundles((p) => ({ ...p, ...Object.fromEntries(pairs) })); })
+      .finally(() => { if (on) setScopeBusy(false); });
+    return () => { on = false; };
+  }, [scope, branches, bundles]);
+
+  const src = useMemo(() => {
+    const own = { invoices: hqInvoices, products: hqProducts, purchases: hqPurchases, purchaseReturns: hqPurchaseReturns, cashMovements: hqCashMovements, zReports: hqZReports };
+    if (scope === 'hq' || !branches.length) return own;
+    const ids = scope === 'all' ? branches.map((b) => b.id) : [scope];
+    const parts = ids.map((id) => bundles[id]).filter(Boolean) as BranchBundle[];
+    const pick = <T,>(k: keyof BranchBundle, mine: T[]): T[] => {
+      const fromBranches = parts.flatMap((p) => (p[k] || []) as T[]);
+      return scope === 'all' ? [...mine, ...fromBranches] : fromBranches;
+    };
+    return {
+      invoices: pick<Invoice>('invoices', hqInvoices),
+      products: pick<Product>('products', hqProducts),
+      purchases: pick<PurchaseInvoice>('purchases', hqPurchases),
+      purchaseReturns: pick<PurchaseReturn>('purchaseReturns', hqPurchaseReturns),
+      cashMovements: pick<CashMovement>('cashMovements', hqCashMovements),
+      zReports: pick<ZClosing>('zReports', hqZReports),
+    };
+  }, [scope, branches, bundles, hqInvoices, hqProducts, hqPurchases, hqPurchaseReturns, hqCashMovements, hqZReports]);
+  const { invoices, products, purchases, purchaseReturns, cashMovements, zReports } = src;
+  const scopeLabel = scope === 'hq' ? 'المركز' : scope === 'all' ? 'المركز وكل الفروع' : (branches.find((b) => b.id === scope)?.name || 'فرع');
+
   const showTobacco = useMemo(() => !!tobaccoEnabled || invoices.some((i) => (i.items || []).some((it) => it.isTobaccoFee)), [tobaccoEnabled, invoices]);
   const [tab, setTab] = useState<ReportKind>('daily');
   // الافتراضي: اليوم — الفترات الأطول من الأزرار (هذا الشهر / هذا الربع / الكل) أو التواريخ
@@ -167,7 +208,14 @@ export default function ReportsView({ invoices, purchases = [], purchaseReturns 
     slate: { idle: 'border-slate-300 text-slate-600 bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-600', on: 'bg-slate-700 border-slate-700 text-white', dot: 'bg-slate-400' },
   };
 
-  const fileBase = `${report.kind}-report-${todayStamp()}`;
+  // نطاق التقرير يُختم على المطبوع والمصدَّر وفي اسم الملف، فلا يختلط تقرير فرع بتقرير المركز
+  const scoped = branches.length > 0 && scope !== 'hq';
+  const outReport = useMemo(
+    () => (scoped ? { ...report, notes: [`نطاق التقرير: ${scopeLabel}`, ...(report.notes || [])] } : report),
+    [report, scoped, scopeLabel],
+  );
+  const scopeSlug = scope === 'all' ? 'all-branches' : scope === 'hq' ? '' : (branches.find((b) => b.id === scope)?.code || 'branch');
+  const fileBase = `${report.kind}-report${scopeSlug ? `-${scopeSlug}` : ''}-${todayStamp()}`;
   const landscape = reportLandscape(report);
 
   const run = async (fn: () => Promise<void>) => {
@@ -177,7 +225,7 @@ export default function ReportsView({ invoices, purchases = [], purchaseReturns 
   };
 
   const onPrint = () => run(async () => {
-    const html = reportToHtml(report, company);
+    const html = reportToHtml(outReport, company);
     const res = await printHtmlDocument(html, {
       silent: printSettings.silent && !!printSettings.a4Printer,
       deviceName: printSettings.a4Printer || undefined,
@@ -188,12 +236,12 @@ export default function ReportsView({ invoices, purchases = [], purchaseReturns 
   });
 
   const onPdf = () => run(async () => {
-    const ok = await exportHtmlAsPdf(reportToHtml(report, company), `${fileBase}.pdf`, landscape);
+    const ok = await exportHtmlAsPdf(reportToHtml(outReport, company), `${fileBase}.pdf`, landscape);
     if (ok) notify('تم تصدير التقرير');
   });
 
   const onCsv = () => run(async () => {
-    const ok = await saveTextFile(`${fileBase}.csv`, reportToCsv(report, company.name), 'csv');
+    const ok = await saveTextFile(`${fileBase}.csv`, reportToCsv(outReport, company.name), 'csv');
     if (ok) notify('تم تصدير الملف (يفتح في Excel)');
   });
 
@@ -206,9 +254,33 @@ export default function ReportsView({ invoices, purchases = [], purchaseReturns 
           <div className="p-3 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-xl"><BarChart3 className="w-8 h-8" /></div>
           <div>
             <h2 className="text-2xl font-black text-slate-800 dark:text-white">التقارير</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold mt-1 flex items-center gap-2">{report.period} — {report.rows.length} سطر {computing && <Loader2 className="w-4 h-4 animate-spin text-cyan-500" />}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold mt-1 flex items-center gap-2">
+              {branches.length > 0 && <span className="px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs">{scopeLabel}</span>}
+              {report.period} — {report.rows.length} سطر {(computing || scopeBusy) && <Loader2 className="w-4 h-4 animate-spin text-cyan-500" />}
+            </p>
           </div>
         </div>
+        {/* محدّد النطاق — يظهر في المركز فقط، ويسري على كل التقارير والفترات والتصدير */}
+        {branches.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 w-full order-last pt-3 border-t border-slate-100 dark:border-slate-700" data-testid="report-scope">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 ml-1">النطاق:</span>
+            <button type="button" onClick={() => setScope('hq')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border ${scope === 'hq' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
+              <Building2 className="w-3.5 h-3.5" />المركز
+            </button>
+            <button type="button" onClick={() => setScope('all')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border ${scope === 'all' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
+              <BarChart3 className="w-3.5 h-3.5" />الكل مجمّعاً
+            </button>
+            {branches.map((b) => (
+              <button key={b.id} type="button" onClick={() => setScope(b.id)} title={`فرع ${b.name} (${b.code})`}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border ${scope === b.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                <GitBranch className="w-3.5 h-3.5" />{b.name}
+              </button>
+            ))}
+            <span className="text-[11px] text-slate-400 mr-auto">بيانات الفروع كما وصلت بآخر مزامنة</span>
+          </div>
+        )}
         <div className="flex flex-col items-end gap-2">
         <div className="flex flex-wrap items-center justify-end gap-2">
           {showCustomer && (
