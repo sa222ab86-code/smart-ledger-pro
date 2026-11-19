@@ -70,6 +70,28 @@ if (staleId) {
     `  ${vaultKeyIdPath}`,
   ].join('\n'));
 }
+/*
+ * الفحص الأقوى: سجل التراخيص نفسه.
+ * بصمة المفاتيح قد تتطابق ومع ذلك يكون البناء خاطئاً — إذا لم يكن في الخزنة ملف بصمة
+ * فلا شيء يقارن به، فيمرّ بناء لا يقبل مفاتيح أصدرتها فعلاً. نتحقق من كل مفتاح في
+ * licenses.csv مقابل المفتاح العام الذي سيدخل البناء (يعمل بمفتاح خاص أو بدونه).
+ */
+const issued = logSignedBy(pem);
+if (issued.checked && issued.ok < issued.checked && !process.env.SL_ALLOW_KEY_CHANGE) {
+  fail([
+    `${issued.checked - issued.ok} من ${issued.checked} ترخيصاً في سجلك لن تعمل على هذا البناء.`,
+    `  المفتاح العام في البناء: ${pemId}`,
+    '',
+    'هذه التراخيص صادرة من زوج مفاتيح آخر، وشحن هذا البناء يُبطل تفعيل أصحابها.',
+    'افحص أيّها يتأثر:  node tools\\license\\generate.cjs --check-all',
+    'والحل عادةً إعادة نسخة private.pem الصحيحة ثم make_license_keys.bat.',
+    '',
+    'وإن كنت تقصد تغيير الهوية فعلاً (كل عميل سيحتاج مفتاحاً جديداً):',
+    '  set SL_ALLOW_KEY_CHANGE=1',
+  ].join('\n'));
+}
+if (issued.checked) console.log(`[protect] سجل التراخيص: ${issued.ok} من ${issued.checked} صالحة على هذا البناء.`);
+
 if (!expected) {
   // لا مفتاح خاص ولا بصمة مسجّلة: لا شيء نقارن به — نسجّلها مع تنبيه واضح بدل التأكيد الكاذب
   fs.writeFileSync(keyIdPath, `${pemId}\n`, 'utf8');
