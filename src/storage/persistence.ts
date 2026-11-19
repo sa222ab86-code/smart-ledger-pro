@@ -313,6 +313,12 @@ let snapshot: Snapshot = { collections: {}, kv: {} };
 let netInfo: NetInfo | null = null;
 const networked = () => !!netInfo && (netInfo.role !== 'standalone' || !!netInfo.merged);
 export const getNetInfo = () => netInfo;
+/**
+ * رمز هذا الفرع في المركز (RYD، B01...) — فارغ للمركز وللجهاز غير المرتبط.
+ * يدخل في ترقيم الفواتير حتى لا يتكرر رقم بين فرعين عند التجميع في المركز.
+ */
+let branchCode = '';
+export const getBranchCode = () => branchCode;
 /** آخر قيمة معروفة من الجهاز الرئيسي لكل مفتاح kv — تُرسل مع التعديل للدمج الثلاثي */
 const kvBase = new Map<string, unknown>();
 const pending = new Map<string, Pending>();
@@ -350,6 +356,12 @@ export async function hydrate(): Promise<void> {
     // إن فشل التحميل نرمي الخطأ: لا نبدأ بالبيانات الابتدائية كي لا نكتب فوق بيانات حقيقية
     if (window.ledger.network) {
       try { netInfo = await window.ledger.network.info(); } catch (e) { console.warn('network info', e); }
+    }
+    if (window.ledger.branches) {
+      try {
+        const bi = await window.ledger.branches.info();
+        branchCode = bi && bi.mode === 'branch' && bi.branch ? String(bi.branch.code || '') : '';
+      } catch (e) { console.warn('branches info', e); }
     }
     snapshot = sanitizeSnapshot(await window.ledger.db.loadAll());
     baselines.clear();

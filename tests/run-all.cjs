@@ -28,7 +28,7 @@ Module._resolveFilename = function (req, parent, ...a) {
 };
 process.env.SL_ROOT = path.join(__dirname, '..');
 (async () => {
-  for (const t of ['accounting.test.cjs', 'branches.test.cjs', 'relay.test.cjs']) {
+  for (const t of ['accounting.test.cjs', 'branches.test.cjs', 'relay.test.cjs', 'hq-settings.test.cjs']) {
     console.log(`\n=== ${t} ===`);
     await require(path.join(__dirname, t))();
   }

@@ -46,6 +46,24 @@ const LOCAL_FIELDS = {
 };
 /** القيمة الابتدائية للحقول الخاصة عند وصول سجل جديد من المركز */
 const LOCAL_DEFAULTS = { products: { stock: 0 }, customers: { balance: 0 } };
+/**
+ * حقول «إعدادات المنشأة» التي يديرها المركز وتنزل لكل الفروع: هوية المنشأة وضريبتها.
+ * العنوان والهاتف والجوال والبريد والطابعات تبقى لكل فرع، لأنها تُطبع على فاتورته
+ * الضريبية ويجب أن تكون عنوان الفرع نفسه لا عنوان المركز.
+ */
+const HQ_SETTINGS_FIELDS = [
+  'companyName', 'companyNameEn', 'vatNumber', 'grNumber', 'moNumber', 'logoUrl',
+  'taxRate', 'vatUnregistered', 'pricesIncludeTax', 'activityType',
+  'invoiceTerms', 'showTerms', 'footer',
+  'bankName', 'bankAccountName', 'bankIban', 'bankAccountNo', 'bankOnA4', 'bankOnReceipt',
+  'multiCurrency', 'tobaccoFee',
+];
+function pickHqSettings(s) {
+  if (!s || typeof s !== 'object') return null;
+  const out = {};
+  for (const k of HQ_SETTINGS_FIELDS) if (s[k] !== undefined) out[k] = s[k];
+  return Object.keys(out).length ? out : null;
+}
 
 const nowIso = () => new Date().toISOString();
 const b64u = (buf) => Buffer.from(buf).toString('base64url');
@@ -205,13 +223,17 @@ function startHq({ store, cfg, appVersion, onBranchSeen }) {
         else after = rows[rows.length - 1].id;
       }
       const done = ci >= MASTER.length;
-      return { mode: 'snap', items, snap: done ? null : { ci, after, seq: cur.seq }, seq: Number(cur.seq) || 0, epoch: ep, collections: MASTER, full: !body.snap };
+      return { mode: 'snap', items, snap: done ? null : { ci, after, seq: cur.seq }, seq: Number(cur.seq) || 0, epoch: ep, collections: MASTER, full: !body.snap, settings: hqSettings() };
     }
     const rows = S.readLog(since, PULL_BATCH);
     const items = materialize(S, collapse(rows, MASTER_SET));
     const seq = rows.length ? rows[rows.length - 1].seq : since;
     S.branches.setPulled(branch.id, seq);
-    return { mode: 'inc', items, seq, more: rows.length === PULL_BATCH, epoch: ep };
+    return { mode: 'inc', items, seq, more: rows.length === PULL_BATCH, epoch: ep, settings: hqSettings() };
+  }
+  /** إعدادات المنشأة التي يديرها المركز — تُرسل مع كل استلام (حجمها ضئيل) */
+  function hqSettings() {
+    try { return pickHqSettings(store.net.getKv('companySettings')); } catch { return null; }
   }
 
   function handle(branch, msg) {
@@ -352,7 +374,7 @@ function createRelayLink({ relay, appVersion, processEnvelope, onStatus }) {
 }
 
 /* ------------------------------ الفرع (العميل) ------------------------------ */
-function createBranchAgent({ store, cfg, appVersion, deviceName, applyIncoming, onStatus, infoForHq }) {
+function createBranchAgent({ store, cfg, appVersion, deviceName, applyIncoming, applySettings, onStatus, infoForHq }) {
   const S = store.sync;
   const B = cfg.branch;
   const key = deriveKey(B.secret, B.id);
@@ -436,6 +458,7 @@ function createBranchAgent({ store, cfg, appVersion, deviceName, applyIncoming, 
       const body = { since: Number(S.metaGet('br.down', 0)) || 0, init: !!S.metaGet('br.init', false), epoch: S.metaGet('br.epoch', ''), snap: S.metaGet('br.snap', null) };
       const r = await call('pull', body);
       if (r.items && r.items.length) { applyIncoming(r.items, { full: r.mode === 'snap' }); got += r.items.length; }
+      if (r.settings && applySettings) { try { applySettings(r.settings); } catch (e) { console.error('[branches] settings', e); } }
       S.metaSet('br.epoch', r.epoch || '');
       if (r.mode === 'snap') {
         if (r.snap) { S.metaSet('br.snap', r.snap); continue; }
@@ -590,6 +613,18 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
           const ops = incomingToOps(store, items);
           if (ops.length) network.applyExternal(ops, 'hq');
         },
+        /** هوية المنشأة وضريبتها من المركز، مع إبقاء عنوان الفرع وهاتفه وطابعاته */
+        applySettings: (incoming) => {
+          let cur = {};
+          try { cur = store.net.getKv('companySettings') || {}; } catch { cur = {}; }
+          const next = { ...cur };
+          let changed = false;
+          for (const k of HQ_SETTINGS_FIELDS) {
+            if (!Object.prototype.hasOwnProperty.call(incoming, k)) continue;
+            if (JSON.stringify(next[k]) !== JSON.stringify(incoming[k])) { next[k] = incoming[k]; changed = true; }
+          }
+          if (changed) network.applyExternal([{ t: 'kv', key: 'companySettings', value: next }], 'hq');
+        },
         onStatus: (s) => emit('branches:status', s),
       });
       agent.start();
@@ -632,6 +667,14 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
   }
 
   const normCode = (c) => String(c || '').trim().toUpperCase().replace(/[^A-Z0-9\-]/g, '').slice(0, 12);
+  /**
+   * رمز الفرع يدخل في ترقيم فواتيره (INV-RYD-27-00001)، ورمز جهاز الشبكة المحلية خانة أو خانتان (A، B1).
+   * فلو كان رمز الفرع بطول خانتين فأقل لاحتمل أن يُنتج نفس رقم فاتورة في المركز.
+   */
+  const checkCode = (cd) => {
+    if (cd.length < 3) throw new Error('رمز الفرع يجب أن يكون 3 خانات فأكثر (مثل B01 أو RYD) — الرموز الأقصر تُستعمل لأجهزة الشبكة المحلية وقد يتكرر رقم الفاتورة');
+    return cd;
+  };
 
   /** حفظ الدور — يسري بعد إعادة التشغيل */
   function configure(input = {}) {
@@ -717,6 +760,7 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
     if (!nm) throw new Error('اكتب اسم الفرع');
     let cd = normCode(code);
     if (!cd) { let i = S.branches.list().length + 1; do { cd = `B${String(i).padStart(2, '0')}`; i++; } while (S.branches.byCode(cd)); }
+    checkCode(cd);
     if (S.branches.byCode(cd)) throw new Error(`الرمز ${cd} مستخدم لفرع آخر`);
     const id = crypto.randomBytes(8).toString('hex');
     S.branches.add({ id, code: cd, name: nm, secret: b64u(crypto.randomBytes(32)) });
@@ -725,7 +769,7 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
   function updateBranch(id, { name, code }) {
     const b = S.branches.get(id);
     if (!b) throw new Error('الفرع غير موجود');
-    const cd = code != null ? normCode(code) : b.code;
+    const cd = code != null ? checkCode(normCode(code)) : b.code;
     const other = S.branches.byCode(cd);
     if (other && other.id !== b.id) throw new Error(`الرمز ${cd} مستخدم لفرع آخر`);
     S.branches.update(id, { name: name != null ? String(name).trim().slice(0, 60) || b.name : b.name, code: cd || b.code });

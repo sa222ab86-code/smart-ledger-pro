@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { Product, Customer, Invoice, Supplier, PurchaseInvoice, PurchaseReturn, CompanySettings, ParkedOrder, CartItem, ProductGroup, BundleItem, ProductUnit, VehicleInfo, PayMethod, CashMovement } from './types';
 import { initialCustomers, initialInvoices, defaultCompanySettings, initialProductGroups } from './data';
-import { usePersistentState, saveUrgently, replaceCollection, flushNow, getNetInfo } from './storage/persistence';
+import { usePersistentState, saveUrgently, replaceCollection, flushNow, getNetInfo, getBranchCode } from './storage/persistence';
 /** رمز واسم هذا الجهاز في المستندات الجديدة (عند ربط الأجهزة) */
 /** أعمدة جدول شاشة البقالة: # · الصنف · الكمية · السعر · الإجمالي · حذف */
 const GROCERY_COLS = '2.25rem minmax(0,1fr) 9.5rem 6rem 6.5rem 2.75rem';
@@ -323,8 +323,10 @@ export default function App() {
   type DocKind = 'INV' | 'RET' | 'QT';
   const docSlot = (kind: DocKind) => {
     const year = String(new Date().getFullYear());
-    // نسخة Pro — أجهزة مربوطة: لكل جهاز رمز في الرقم (INV-B-27-00001) وتسلسل مستقل، فلا يتكرر رقم بين جهازين
-    const tag = getNetInfo()?.tag || '';
+    // نسخة Pro — أجهزة مربوطة: لكل جهاز رمز في الرقم (INV-B-27-00001) وتسلسل مستقل، فلا يتكرر رقم بين جهازين.
+    // وفرع مرتبط بمركز: رمز الفرع يسبق رمز الجهاز (INV-RYD-27-00001 أو INV-RYD-B-27-00001)،
+    // فلا يتصادم ترقيم فرعين ولا ترقيم فرع مع المركز عند تجميع الفواتير.
+    const tag = [getBranchCode(), getNetInfo()?.tag].filter(Boolean).join('-');
     if (tag) {
       const p = `${kind}-${tag}`;
       if (kind === 'QT' || docNumbering !== 'yearly') {
