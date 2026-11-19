@@ -1,0 +1,15 @@
+name = "smart-ledger-relay"
+main = "src/worker.js"
+compatibility_date = "2026-01-01"
+
+[[durable_objects.bindings]]
+name = "HQ"
+class_name = "HqLink"
+
+# الخطة المجانية تدعم SQLite فقط
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["HqLink"]
+
+[observability]
+enabled = true

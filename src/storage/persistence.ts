@@ -247,14 +247,20 @@ export interface BranchRow {
 }
 export interface BranchesInfo {
   mode: BranchMode; intervalSec: number; blocked: string; lanRole: string; localIps: string[]; defaultPort: number;
-  hq?: { port: number; publicHost: string; name: string; server: { listening: boolean; error: string | null; port: number } | null };
+  hq?: {
+    port: number; publicHost: string; name: string;
+    server: { listening: boolean; error: string | null; port: number } | null;
+    /** الممر السحابي: hqKey السرّي لا يصل إلى الواجهة */
+    relay?: { url: string; hqId: string; configured: boolean } | null;
+    relayStatus?: { enabled: boolean; connected: boolean; lastError: string; lastConnectedAt: string | null; attempts: number; served: number } | null;
+  };
   branches?: BranchRow[];
-  branch?: { host: string; port: number; id: string; name: string; code: string; hqName: string; sync: BranchSyncStatus | null };
+  branch?: { host: string; port: number; id: string; name: string; code: string; hqName: string; viaRelay?: boolean; sync: BranchSyncStatus | null };
 }
 type Res<T = object> = Promise<({ ok: true; error?: undefined } & T) | { ok: false; error?: string }>;
 export interface BranchesApi {
   info(): Promise<BranchesInfo>;
-  configure(input: { mode?: BranchMode; publicHost?: string; port?: number; hqName?: string; intervalSec?: number }): Promise<{ ok: boolean; error?: string; needsRestart?: boolean }>;
+  configure(input: { mode?: BranchMode; publicHost?: string; port?: number; hqName?: string; intervalSec?: number; relayUrl?: string }): Promise<{ ok: boolean; error?: string; needsRestart?: boolean }>;
   testLink(code: string): Promise<{ ok: boolean; error?: string; hqName?: string; version?: string; branch?: { id: string; code: string; name: string }; host?: string; port?: number }>;
   join(code: string): Promise<{ ok: boolean; error?: string; needsRestart?: boolean; hqName?: string }>;
   syncNow(): Promise<{ ok: boolean; error?: string; up?: number; down?: number }>;

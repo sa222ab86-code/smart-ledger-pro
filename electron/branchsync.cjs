@@ -72,8 +72,11 @@ function unseal(key, env, aad) {
 }
 
 /* ------------------------------ رمز الربط ------------------------------ */
-function makeLinkCode({ host, port, id, secret, name, code, hqName }) {
-  return LINK_PREFIX + b64u(Buffer.from(JSON.stringify({ h: host, p: port, i: id, k: secret, n: name, c: code, q: hqName || '' }), 'utf8'));
+function makeLinkCode({ host, port, id, secret, name, code, hqName, relay }) {
+  // relay (اختياري): { url, hqId, branchKey } — وجوده يعني أن الفرع يصل عبر الممر لا بعنوان محلي
+  const o = { h: host, p: port, i: id, k: secret, n: name, c: code, q: hqName || '' };
+  if (relay && relay.url && relay.hqId && relay.branchKey) o.r = { u: relay.url, g: relay.hqId, y: relay.branchKey };
+  return LINK_PREFIX + b64u(Buffer.from(JSON.stringify(o), 'utf8'));
 }
 function parseLinkCode(text) {
   const t = String(text || '').replace(/\s+/g, '');
@@ -83,7 +86,14 @@ function parseLinkCode(text) {
   if (!o || !o.h || !o.i || !o.k) throw new Error('رمز الربط ناقص');
   const port = Number(o.p) || DEFAULT_PORT;
   if (!/^[A-Za-z0-9.\-:\[\]]+$/.test(String(o.h))) throw new Error('عنوان المركز في الرمز غير صالح');
-  return { host: String(o.h), port, id: String(o.i), secret: String(o.k), name: String(o.n || ''), code: String(o.c || ''), hqName: String(o.q || '') };
+  let relay = null;
+  if (o.r && o.r.u && o.r.g && o.r.y) {
+    let u;
+    try { u = new URL(String(o.r.u)); } catch { throw new Error('عنوان الممر في رمز الربط غير صالح'); }
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('عنوان الممر في رمز الربط غير صالح');
+    relay = { url: u.origin, hqId: String(o.r.g), branchKey: String(o.r.y) };
+  }
+  return { host: String(o.h), port, id: String(o.i), secret: String(o.k), name: String(o.n || ''), code: String(o.c || ''), hqName: String(o.q || ''), relay };
 }
 
 /* ------------------------------ الإعدادات ------------------------------ */
@@ -98,10 +108,20 @@ function loadBranchConfig(userDataDir) {
       port: Number(raw.hq && raw.hq.port) > 1024 && Number(raw.hq.port) < 65536 ? Number(raw.hq.port) : DEFAULT_PORT,
       publicHost: String((raw.hq && raw.hq.publicHost) || ''),
       name: String((raw.hq && raw.hq.name) || ''),
+      // الممر السحابي (اختياري): يُمكّن الفروع البعيدة بلا فتح بورت
+      relay: raw.hq && raw.hq.relay && raw.hq.relay.url ? {
+        url: String(raw.hq.relay.url),
+        hqId: String(raw.hq.relay.hqId || ''),
+        hqKey: String(raw.hq.relay.hqKey || ''),
+        branchKey: String(raw.hq.relay.branchKey || ''),
+      } : null,
     },
     branch: raw.branch && raw.branch.id && raw.branch.secret ? {
       host: String(raw.branch.host), port: Number(raw.branch.port) || DEFAULT_PORT, id: String(raw.branch.id), secret: String(raw.branch.secret),
       name: String(raw.branch.name || ''), code: String(raw.branch.code || ''), hqName: String(raw.branch.hqName || ''),
+      relay: raw.branch.relay && raw.branch.relay.url && raw.branch.relay.hqId ? {
+        url: String(raw.branch.relay.url), hqId: String(raw.branch.relay.hqId), branchKey: String(raw.branch.relay.branchKey || ''),
+      } : null,
     } : null,
   };
   if (cfg.mode === 'branch' && !cfg.branch) cfg.mode = 'none';
@@ -208,28 +228,37 @@ function startHq({ store, cfg, appVersion, onBranchSeen }) {
     throw new Error('عملية غير معروفة');
   }
 
+  /**
+   * معالجة ظرف مزامنة واحد. لا تعرف شيئاً عن وسيلة النقل، فيستعملها خادم الشبكة
+   * المحلية والممر السحابي معاً: تأخذ الظرف المختوم وتعيد الحالة والرد المختوم.
+   */
+  function processEnvelope(env, meta = {}) {
+    const branch = env && env.b ? S.branches.get(env.b) : null;
+    if (!branch) return { status: 401, body: { ok: false, code: 'unknown', error: 'هذا الفرع غير مسجّل في المركز (ربما حُذف) — اطلب رمز ربط جديد' } };
+    if (branch.status !== 'active') return { status: 403, body: { ok: false, code: 'revoked', error: 'المركز أوقف ربط هذا الفرع' } };
+    const key = deriveKey(branch.secret, branch.id);
+    let msg;
+    try { msg = unseal(key, env, `${branch.id}|req`); } catch { return { status: 401, body: { ok: false, code: 'key', error: 'مفتاح الفرع غير مطابق — أعد الربط برمز جديد من المركز' } }; }
+    if (!msg || typeof msg.nonce !== 'string' || Math.abs(Date.now() - Number(msg.ts)) > CLOCK_WINDOW_MS) {
+      return { status: 400, body: { ok: false, code: 'clock', error: 'وقت جهاز الفرع يختلف كثيراً عن وقت المركز — اضبط التاريخ والساعة في الجهازين' } };
+    }
+    if (seenNonce(msg.nonce)) return { status: 409, body: { ok: false, code: 'replay', error: 'طلب مكرر' } };
+    let out; let ok = true; let err = '';
+    try { out = handle(branch, msg); } catch (e) { ok = false; err = errText(e); console.error('[branches] hq handle', e); }
+    S.branches.touch(branch.id, { ip: meta.ip || '', version: String(msg.version || ''), info: msg.info && typeof msg.info === 'object' ? msg.info : undefined });
+    if (onBranchSeen) onBranchSeen(branch.id);
+    if (Date.now() - lastPrune > 6 * 3600 * 1000) { lastPrune = Date.now(); try { S.pruneKeep(HQ_LOG_KEEP); } catch { /* */ } }
+    return { status: 200, body: seal(key, { ts: Date.now(), ok, error: err, body: out }, `${branch.id}|res|${msg.nonce}`) };
+  }
+
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://x');
       if (req.method === 'GET' && url.pathname === '/sync/v1/ping') return sendJson(res, 200, { ok: true, app: APP_ID });
       if (req.method !== 'POST' || url.pathname !== '/sync/v1') return sendJson(res, 404, { ok: false, error: 'not found' });
       const env = await readBody(req);
-      const branch = env && env.b ? S.branches.get(env.b) : null;
-      if (!branch) return sendJson(res, 401, { ok: false, code: 'unknown', error: 'هذا الفرع غير مسجّل في المركز (ربما حُذف) — اطلب رمز ربط جديد' });
-      if (branch.status !== 'active') return sendJson(res, 403, { ok: false, code: 'revoked', error: 'المركز أوقف ربط هذا الفرع' });
-      const key = deriveKey(branch.secret, branch.id);
-      let msg;
-      try { msg = unseal(key, env, `${branch.id}|req`); } catch { return sendJson(res, 401, { ok: false, code: 'key', error: 'مفتاح الفرع غير مطابق — أعد الربط برمز جديد من المركز' }); }
-      if (!msg || typeof msg.nonce !== 'string' || Math.abs(Date.now() - Number(msg.ts)) > CLOCK_WINDOW_MS) {
-        return sendJson(res, 400, { ok: false, code: 'clock', error: 'وقت جهاز الفرع يختلف كثيراً عن وقت المركز — اضبط التاريخ والساعة في الجهازين' });
-      }
-      if (seenNonce(msg.nonce)) return sendJson(res, 409, { ok: false, code: 'replay', error: 'طلب مكرر' });
-      let out; let ok = true; let err = '';
-      try { out = handle(branch, msg); } catch (e) { ok = false; err = errText(e); console.error('[branches] hq handle', e); }
-      S.branches.touch(branch.id, { ip: (req.socket.remoteAddress || '').replace(/^::ffff:/, ''), version: String(msg.version || ''), info: msg.info && typeof msg.info === 'object' ? msg.info : undefined });
-      if (onBranchSeen) onBranchSeen(branch.id);
-      if (Date.now() - lastPrune > 6 * 3600 * 1000) { lastPrune = Date.now(); try { S.pruneKeep(HQ_LOG_KEEP); } catch { /* */ } }
-      return sendJson(res, 200, seal(key, { ts: Date.now(), ok, error: err, body: out }, `${branch.id}|res|${msg.nonce}`));
+      const r = processEnvelope(env, { ip: (req.socket.remoteAddress || '').replace(/^::ffff:/, '') });
+      return sendJson(res, r.status, r.body);
     } catch (e) {
       console.error('[branches] request failed', e);
       try { sendJson(res, 500, { ok: false, error: errText(e) }); } catch { /* */ }
@@ -242,10 +271,83 @@ function startHq({ store, cfg, appVersion, onBranchSeen }) {
   epoch();
 
   return {
+    processEnvelope,
     status: () => ({ listening, error, port: cfg.hq.port }),
     /** تغيّرت قائمة البيانات الرئيسية (تحديث للبرنامج): الفروع تعيد المزامنة الكاملة */
     resetEpoch: () => S.metaSet('hq.epoch', crypto.randomBytes(6).toString('hex')),
     close: () => new Promise((r) => { try { server.close(() => r()); } catch { r(); } }),
+  };
+}
+
+/* ------------------------------ الممر السحابي ------------------------------ */
+/**
+ * اتصال المركز الدائم بالممر: يخرج من المركز إلى الإنترنت فلا يحتاج فتح بورت ولا راوتر.
+ * ينام خاملاً ولا يُرسل شيئاً حتى يصل طلب فرع، ويعيد الاتصال وحده عند أي انقطاع.
+ * ما يمرّ هنا ظرف مختوم: الممر لا يملك مفتاح فكّه.
+ */
+function createRelayLink({ relay, appVersion, processEnvelope, onStatus }) {
+  const st = { enabled: true, connected: false, lastError: '', lastConnectedAt: null, attempts: 0, served: 0 };
+  let ws = null, stopped = false, timer = null, pingTimer = null, backoff = 2000;
+  const emit = () => { if (onStatus) { try { onStatus({ ...st }); } catch { /* */ } } };
+
+  const wsUrl = () => {
+    const u = new URL('/hq', String(relay.url).replace(/\/+$/, '') + '/');
+    u.protocol = u.protocol === 'http:' ? 'ws:' : u.protocol === 'https:' ? 'wss:' : u.protocol;
+    u.searchParams.set('id', relay.hqId);
+    u.searchParams.set('k', relay.hqKey);
+    u.searchParams.set('bk', relay.branchKey);
+    u.searchParams.set('v', appVersion);
+    return u.toString();
+  };
+
+  const scheduleReconnect = () => {
+    if (stopped || timer) return;
+    timer = setTimeout(() => { timer = null; connect(); }, backoff);
+    backoff = Math.min(60000, Math.round(backoff * 1.8)); // تراجع تدريجي: لا يُرهق الممر ولا الشبكة
+  };
+
+  function connect() {
+    if (stopped) return;
+    st.attempts++;
+    let sock;
+    try { sock = new WebSocket(wsUrl()); } catch (e) { st.lastError = errText(e); emit(); return scheduleReconnect(); }
+    ws = sock;
+    sock.onopen = () => {
+      if (ws !== sock) return;
+      st.connected = true; st.lastError = ''; st.lastConnectedAt = nowIso(); backoff = 2000; emit();
+      clearInterval(pingTimer);
+      pingTimer = setInterval(() => { try { sock.send(JSON.stringify({ t: 'ping' })); } catch { /* */ } }, 4 * 60 * 1000);
+    };
+    sock.onmessage = (ev) => {
+      if (ws !== sock) return;
+      let m;
+      try { m = JSON.parse(typeof ev.data === 'string' ? ev.data : Buffer.from(ev.data).toString('utf8')); } catch { return; }
+      if (m.t !== 'req' || !m.rid) return;
+      let status = 500, body = { ok: false, error: 'relay handler failed' };
+      try {
+        const env = typeof m.env === 'string' ? JSON.parse(m.env) : m.env;
+        const r = processEnvelope(env, { ip: 'relay' });
+        status = r.status; body = r.body;
+      } catch (e) { body = { ok: false, error: errText(e) }; console.error('[branches] relay handle', e); }
+      try { sock.send(JSON.stringify({ t: 'res', rid: m.rid, status, body })); st.served++; } catch (e) { st.lastError = errText(e); }
+      emit();
+    };
+    sock.onclose = (ev) => {
+      if (ws !== sock) return;
+      clearInterval(pingTimer);
+      st.connected = false;
+      // 1008/403 تعني أن المعرّف مسجّل لمركز آخر: إعادة المحاولة لن تنفع
+      if (ev && (ev.code === 1008 || ev.code === 4403)) { st.lastError = 'الممر رفض الاتصال: هذا المعرّف مسجّل لمركز آخر'; st.enabled = false; emit(); return; }
+      st.lastError = st.lastError || 'انقطع الاتصال بالممر — إعادة المحاولة';
+      emit(); scheduleReconnect();
+    };
+    sock.onerror = (e) => { if (ws === sock) { st.lastError = errText(e && e.error ? e.error : e) || 'تعذّر الوصول للممر'; emit(); } };
+  }
+
+  connect();
+  return {
+    status: () => ({ ...st }),
+    close: () => { stopped = true; clearTimeout(timer); clearInterval(pingTimer); try { if (ws) ws.close(); } catch { /* */ } },
   };
 }
 
@@ -263,15 +365,23 @@ function createBranchAgent({ store, cfg, appVersion, deviceName, applyIncoming, 
 
   const emit = () => { if (onStatus) { try { onStatus(status()); } catch { /* */ } } };
   const base = () => `http://${B.host.includes(':') && !B.host.startsWith('[') ? `[${B.host}]` : B.host}:${B.port}`;
+  const R = B.relay && B.relay.url && B.relay.hqId ? B.relay : null;
+  /** عنوان الإرسال: الممر إن كان مضبوطاً، وإلا العنوان المحلي كما كان */
+  const target = () => (R ? `${R.url}/b/${encodeURIComponent(R.hqId)}` : `${base()}/sync/v1`);
+  const unreachable = () => (R
+    ? 'تعذّر الوصول للمركز عبر الممر — تأكد من اتصال الإنترنت في الفرع'
+    : `تعذّر الوصول للمركز (${B.host}:${B.port}) — تأكد من الإنترنت وأن جهاز المركز يعمل وأن المنفذ مفتوح`);
 
   async function call(op, body, timeoutMs = 120000) {
     const nonce = crypto.randomBytes(12).toString('hex');
     const env = { v: 1, b: B.id, ...seal(key, { ts: Date.now(), nonce, op, body, version: appVersion, info: op === 'hello' || op === 'pull' ? infoForHq() : undefined }, `${B.id}|req`) };
     let res;
     try {
-      res = await fetch(`${base()}/sync/v1`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(env), signal: AbortSignal.timeout(timeoutMs) });
+      const headers = { 'Content-Type': 'application/json' };
+      if (R) headers['x-sl-key'] = R.branchKey;
+      res = await fetch(target(), { method: 'POST', headers, body: JSON.stringify(env), signal: AbortSignal.timeout(timeoutMs) });
     } catch {
-      throw new Error(`تعذّر الوصول للمركز (${B.host}:${B.port}) — تأكد من الإنترنت وأن جهاز المركز يعمل وأن المنفذ مفتوح`);
+      throw new Error(unreachable());
     }
     let data = null;
     try { data = await res.json(); } catch { data = null; }
@@ -439,6 +549,13 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
   const emit = (ch, d) => { try { send(ch, d); } catch { /* */ } };
   let hq = null;
   let agent = null;
+  let relayLink = null;
+
+  /** بيانات الممر التي تُوضع في رمز الربط (بلا المفتاح السرّي للمركز) */
+  function relayPublic() {
+    const r = cfg.hq.relay;
+    return r && r.url && r.hqId && r.branchKey ? { url: r.url, hqId: r.hqId, branchKey: r.branchKey } : null;
+  }
   let blocked = '';
   let unsubscribe = null;
 
@@ -459,6 +576,12 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
     if (cfg.mode === 'hq') {
       hq = startHq({ store, cfg, appVersion, onBranchSeen: () => emit('branches:changed', {}) });
       if (changed) hq.resetEpoch();
+      if (cfg.hq.relay && cfg.hq.relay.url && cfg.hq.relay.hqId && cfg.hq.relay.hqKey) {
+        relayLink = createRelayLink({
+          relay: cfg.hq.relay, appVersion, processEnvelope: hq.processEnvelope,
+          onStatus: (s) => emit('branches:relay', s),
+        });
+      }
     } else if (cfg.mode === 'branch') {
       if (changed) S.metaSet('br.upInit', false); // مجموعة جديدة تُرفع: رفع كامل مرة واحدة (لا يتكرر شيء في المركز)
       agent = createBranchAgent({
@@ -479,9 +602,13 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
 
   function info() {
     const out = { mode: cfg.mode, intervalSec: cfg.intervalSec, blocked, lanRole: lanRole(), localIps: localIps(), defaultPort: DEFAULT_PORT };
-    if (cfg.mode === 'hq' || cfg.hq.publicHost) out.hq = { ...cfg.hq, server: hq ? hq.status() : null };
+    if (cfg.mode === 'hq' || cfg.hq.publicHost) {
+      // المفتاح السرّي للمركز لا يخرج إلى الواجهة
+      const r = cfg.hq.relay;
+      out.hq = { ...cfg.hq, relay: r ? { url: r.url, hqId: r.hqId, configured: !!r.hqKey } : null, server: hq ? hq.status() : null, relayStatus: relayLink ? relayLink.status() : null };
+    }
     if (cfg.mode === 'hq') out.branches = listBranches();
-    if (cfg.branch) out.branch = { host: cfg.branch.host, port: cfg.branch.port, id: cfg.branch.id, name: cfg.branch.name, code: cfg.branch.code, hqName: cfg.branch.hqName, sync: agent ? agent.status() : null };
+    if (cfg.branch) out.branch = { host: cfg.branch.host, port: cfg.branch.port, id: cfg.branch.id, name: cfg.branch.name, code: cfg.branch.code, hqName: cfg.branch.hqName, viaRelay: !!(cfg.branch.relay && cfg.branch.relay.url), sync: agent ? agent.status() : null };
     return out;
   }
 
@@ -501,7 +628,7 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
   function linkCodeFor(id) {
     const b = S.branches.get(id);
     if (!b) throw new Error('الفرع غير موجود');
-    return makeLinkCode({ host: hostForLinks(), port: cfg.hq.port, id: b.id, secret: b.secret, name: b.name, code: b.code, hqName: cfg.hq.name });
+    return makeLinkCode({ host: hostForLinks(), port: cfg.hq.port, id: b.id, secret: b.secret, name: b.name, code: b.code, hqName: cfg.hq.name, relay: relayPublic() });
   }
 
   const normCode = (c) => String(c || '').trim().toUpperCase().replace(/[^A-Z0-9\-]/g, '').slice(0, 12);
@@ -523,9 +650,28 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
       next.hq.port = p;
     }
     if (input.hqName != null) next.hq.name = String(input.hqName).trim().slice(0, 60);
+    if (input.relayUrl != null) {
+      const raw = String(input.relayUrl).trim();
+      if (!raw) {
+        next.hq.relay = null; // إيقاف الممر: الفروع الجديدة ترجع للعنوان المحلي
+      } else {
+        let u;
+        try { u = new URL(raw.includes('://') ? raw : `https://${raw}`); } catch { return { ok: false, error: 'عنوان الممر غير صالح' }; }
+        if (u.protocol !== 'https:' && u.protocol !== 'http:') return { ok: false, error: 'عنوان الممر يجب أن يبدأ بـ https' };
+        const cur = next.hq.relay;
+        next.hq.relay = {
+          url: u.origin,
+          // تُولَّد مرة واحدة وتبقى: تغييرها يُبطل رموز الربط الموزّعة على الفروع
+          hqId: (cur && cur.hqId) || crypto.randomBytes(12).toString('base64url'),
+          hqKey: (cur && cur.hqKey) || crypto.randomBytes(32).toString('base64url'),
+          branchKey: (cur && cur.branchKey) || crypto.randomBytes(24).toString('base64url'),
+        };
+      }
+    }
     if (input.intervalSec != null) next.intervalSec = Math.min(3600, Math.max(15, Number(input.intervalSec) || 60));
     if (mode === 'none' && cfg.mode === 'branch') next.branch = null;
-    const needsRestart = next.mode !== cfg.mode || next.hq.port !== cfg.hq.port || next.intervalSec !== cfg.intervalSec;
+    const relayChanged = JSON.stringify(next.hq.relay || null) !== JSON.stringify(cfg.hq.relay || null);
+    const needsRestart = next.mode !== cfg.mode || next.hq.port !== cfg.hq.port || next.intervalSec !== cfg.intervalSec || relayChanged;
     if (next.mode !== cfg.mode) { S.metaSet('br.upInit', false); resetBranchMeta(); }
     Object.assign(cfg, next);
     save(cfg);
@@ -613,7 +759,7 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
     },
     syncNow: () => (agent ? agent.syncNow() : Promise.resolve({ ok: false, error: blocked || 'هذا الجهاز ليس فرعاً مرتبطاً' })),
     mode: () => cfg.mode,
-    dispose: async () => { if (unsubscribe) unsubscribe(); if (agent) agent.stop(); if (hq) await hq.close(); },
+    dispose: async () => { if (unsubscribe) unsubscribe(); if (agent) agent.stop(); if (relayLink) relayLink.close(); if (hq) await hq.close(); },
   };
 }
 

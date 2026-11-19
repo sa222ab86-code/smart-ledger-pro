@@ -56,6 +56,7 @@ export default function BranchesManager({ notify, onOpenAccounting }: { notify: 
   const [mode, setMode] = useState<BranchMode>('none');
   const [hqName, setHqName] = useState('');
   const [publicHost, setPublicHost] = useState('');
+  const [relayUrl, setRelayUrl] = useState('');
   const [port, setPort] = useState('47830');
   const [interval, setIntervalSec] = useState('60');
   const [link, setLink] = useState('');
@@ -72,7 +73,7 @@ export default function BranchesManager({ notify, onOpenAccounting }: { notify: 
     const i = await api.info();
     setInfo(i);
     if (first) {
-      setMode(i.mode); setHqName(i.hq?.name || ''); setPublicHost(i.hq?.publicHost || ''); setPort(String(i.hq?.port || i.defaultPort)); setIntervalSec(String(i.intervalSec));
+      setMode(i.mode); setHqName(i.hq?.name || ''); setPublicHost(i.hq?.publicHost || ''); setRelayUrl(i.hq?.relay?.url || ''); setPort(String(i.hq?.port || i.defaultPort)); setIntervalSec(String(i.intervalSec));
     }
   };
   useEffect(() => {
@@ -96,7 +97,7 @@ export default function BranchesManager({ notify, onOpenAccounting }: { notify: 
   const saveHq = () => act(async () => {
     if (info?.mode === 'branch' && mode === 'hq') { setMsg({ ok: false, text: 'هذا الجهاز مرتبط كفرع — ألغِ الربط أولاً' }); return; }
     if (mode === 'hq' && info?.mode !== 'hq' && !window.confirm('سيصبح هذا الجهاز «المركز الرئيسي»: يستقبل بيانات الفروع ويرسل لها الأصناف والأسعار والعملاء والموردين ودليل الحسابات.\nيجب أن يبقى يعمل ومتصلاً بالإنترنت أثناء المزامنة. متابعة؟')) return;
-    const r = await api.configure({ mode, hqName, publicHost, port: Number(port), intervalSec: Number(interval) });
+    const r = await api.configure({ mode, hqName, publicHost, port: Number(port), intervalSec: Number(interval), relayUrl });
     if (!r.ok) { setMsg({ ok: false, text: r.error || 'تعذّر الحفظ' }); return; }
     await load();
     if (r.needsRestart) await restartAsk('تم الحفظ'); else setMsg({ ok: true, text: 'تم الحفظ' });
@@ -289,12 +290,24 @@ export default function BranchesManager({ notify, onOpenAccounting }: { notify: 
               <label className="text-xs font-bold text-slate-500 space-y-1"><span>العنوان العام (IP ثابت أو DDNS)</span><input className={`${input} font-mono`} dir="ltr" value={publicHost} onChange={(e) => setPublicHost(e.target.value.trim())} placeholder="myshop.ddns.net" /></label>
               <label className="text-xs font-bold text-slate-500 space-y-1"><span>المنفذ</span><input className={`${input} font-mono`} dir="ltr" value={port} onChange={(e) => setPort(e.target.value.replace(/\D/g, ''))} /></label>
             </div>
+            <label className="text-xs font-bold text-slate-500 space-y-1 block">
+              <span>عنوان الممر (للفروع البعيدة بلا فتح منافذ)</span>
+              <input className={`${input} font-mono`} dir="ltr" value={relayUrl} onChange={(e) => setRelayUrl(e.target.value.trim())} placeholder="https://xxx.workers.dev" />
+            </label>
+            {info?.hq?.relay?.url && (
+              <div className={`text-xs rounded-xl p-2.5 ${info.hq.relayStatus?.connected ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300'}`}>
+                {info.hq.relayStatus?.connected
+                  ? <>المركز متصل بالممر — الفروع البعيدة تعمل بلا فتح منافذ. رموز الربط الجديدة تستعمل الممر تلقائياً.</>
+                  : <>المركز غير متصل بالممر الآن{info.hq.relayStatus?.lastError ? ` (${info.hq.relayStatus.lastError})` : ''} — تجري إعادة المحاولة تلقائياً. مبيعات الفروع محفوظة عندها وسترفع عند عودة الاتصال.</>}
+              </div>
+            )}
             <div className="text-xs text-slate-500 leading-6 rounded-xl bg-slate-50 dark:bg-slate-950 p-3">
-              <b className="flex items-center gap-1"><ShieldCheck className="w-4 h-4 text-teal-600" />تجهيز المركز للاتصال من الإنترنت (مرة واحدة):</b>
+              <b className="flex items-center gap-1"><ShieldCheck className="w-4 h-4 text-teal-600" />الأسهل — الممر: الصق عنوانه أعلاه واحفظ. المركز يتصل به من الداخل للخارج، فلا تحتاج فتح منفذ ولا IP ثابت ولا DDNS، والفرع لا يحتاج أي إعداد. بياناتك تمرّ مشفّرة والممر لا يستطيع قراءتها.</b>
+              <b className="flex items-center gap-1 mt-2"><ShieldCheck className="w-4 h-4 text-slate-400" />أو يدوياً بفتح منفذ (مرة واحدة):</b>
               ١) من إعدادات الراوتر: «Port Forwarding» للمنفذ <b className="font-mono">{port || 47830}</b> (TCP) إلى عنوان هذا الجهاز <b className="font-mono">{info?.localIps?.[0] || '—'}</b>.
               ٢) إن لم يكن لديك IP ثابت: فعّل خدمة DDNS (مثل No-IP أو DynDNS من الراوتر) واكتب اسمها في «العنوان العام».
               ٣) عند أول تشغيل اسمح للبرنامج في جدار حماية ويندوز.
-              بديل بدون فتح منافذ: شبكة VPN خاصة (مثل Tailscale أو ZeroTier) واكتب عنوان المركز فيها.
+              بديل ثالث: شبكة VPN خاصة (مثل Tailscale أو ZeroTier) واكتب عنوان المركز فيها.
             </div>
           </div>
         )}
