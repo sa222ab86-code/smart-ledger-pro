@@ -4,8 +4,9 @@ import { InvoicePaymentModal } from './PaymentModals';
 import SalesReturnModal, { type SalesReturnRequest } from './SalesReturnModal';
 import { isReturnDoc, isUnsettled } from '../utils/invoiceMath';
 import { hasReturnableQty, returnedQtyByLine } from '../utils/returns';
+import { hqBranches, hqBranchData, type BranchBundle } from '../storage/persistence';
 import { useVirtualRows, VSpacer } from '../utils/useVirtualRows';
-import { Receipt, Search, Eye, Printer, Coins, ArrowRightLeft, Zap, Wallet, RotateCcw, FileCode, FileDown, Plus } from 'lucide-react';
+import { Receipt, Search, Eye, Printer, Coins, ArrowRightLeft, Zap, Wallet, RotateCcw, FileCode, FileDown, Plus, Building2, GitBranch, Loader2 } from 'lucide-react';
 import { Invoice, MultiCurrencySettings, CurrencyConfig, PayMethod } from '../types';
 import { defaultCurrencies } from '../data';
 import { deviceNames, deviceTagOf, deviceTitle, NO_DEVICE } from '../utils/device';
@@ -45,18 +46,43 @@ interface InvoicesListProps {
 }
 
 export default function InvoicesList({ 
-  invoices, 
-  onNewInvoice,
+  invoices: hqInvoices, 
+  onNewInvoice: onNewInvoiceProp,
   creditOnly,
   onViewInvoice, 
   onPrintInvoice, 
   multiCurrencySettings,
-  onPayInvoice,
-  onCreateReturn,
+  onPayInvoice: onPayInvoiceProp,
+  onCreateReturn: onCreateReturnProp,
   onPdfInvoice,
   scan,
   notify,
 }: InvoicesListProps) {
+  // ---- نطاق العرض: المركز وحده أو فرع ----
+  // فواتير الفرع تُعرض للاطلاع والطباعة فقط: السداد والمرتجع يتمّان في الفرع نفسه،
+  // لأن تعديلها هنا لن يصل إليه ولأن المزامنة تمشي من الفرع إلى المركز لا العكس.
+  const [branches, setBranches] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [scope, setScope] = useState<string>('hq');
+  const [bundles, setBundles] = useState<Record<string, BranchBundle>>({});
+  const [scopeBusy, setScopeBusy] = useState(false);
+  useEffect(() => { let on = true; void hqBranches().then((b) => { if (on) setBranches(b); }); return () => { on = false; }; }, []);
+  useEffect(() => {
+    if (scope === 'hq' || bundles[scope]) return;
+    let on = true;
+    setScopeBusy(true);
+    void hqBranchData(scope)
+      .then((d) => { if (on) setBundles((p) => ({ ...p, [scope]: d })); })
+      .finally(() => { if (on) setScopeBusy(false); });
+    return () => { on = false; };
+  }, [scope, bundles]);
+  const readOnlyScope = branches.length > 0 && scope !== 'hq';
+  const invoices = useMemo(
+    () => (readOnlyScope ? ((bundles[scope]?.invoices || []) as Invoice[]) : hqInvoices),
+    [readOnlyScope, bundles, scope, hqInvoices],
+  );
+  const onNewInvoice = readOnlyScope ? undefined : onNewInvoiceProp;
+  const onPayInvoice = readOnlyScope ? undefined : onPayInvoiceProp;
+  const onCreateReturn = readOnlyScope ? undefined : onCreateReturnProp;
   const zatcaApi = typeof window !== "undefined" ? window.ledger?.zatca : undefined;
   const [zatcaDetailId, setZatcaDetailId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'returns'>(creditOnly ? 'unpaid' : 'all');
@@ -179,9 +205,27 @@ export default function InvoicesList({
               ? <><Wallet className="w-6 h-6 text-rose-600 dark:text-rose-400" /><span>الفواتير الآجلة</span></>
               : <><Receipt className="w-6 h-6 text-cyan-600 dark:text-cyan-400" /><span>سجل الفواتير والمبيعات</span></>}
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{creditOnly
-            ? 'الفواتير غير المسددة أو المسددة جزئياً من كل الفترات — اضغط «سداد» لتحصيل المبلغ.'
-            : 'مراجعة والبحث في الفواتير الضريبية المبسطة الصادرة من الكاشير.'}</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{readOnlyScope
+            ? `فواتير ${branches.find((b) => b.id === scope)?.name || 'الفرع'} كما وصلت بآخر مزامنة — للاطلاع والطباعة فقط، والسداد والمرتجع يتمّان في الفرع نفسه.`
+            : creditOnly
+              ? 'الفواتير غير المسددة أو المسددة جزئياً من كل الفترات — اضغط «سداد» لتحصيل المبلغ.'
+              : 'مراجعة والبحث في الفواتير الضريبية المبسطة الصادرة من الكاشير.'}</p>
+          {/* محدّد النطاق — يظهر في المركز فقط */}
+          {branches.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-3" data-testid="invoices-scope">
+              <button type="button" onClick={() => setScope('hq')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border ${scope === 'hq' ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                <Building2 className="w-3.5 h-3.5" />المركز
+              </button>
+              {branches.map((b) => (
+                <button key={b.id} type="button" onClick={() => setScope(b.id)} title={`فرع ${b.name} (${b.code})`}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border ${scope === b.id ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                  <GitBranch className="w-3.5 h-3.5" />{b.name}
+                </button>
+              ))}
+              {scopeBusy && <Loader2 className="w-4 h-4 animate-spin text-cyan-500" />}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
