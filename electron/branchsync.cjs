@@ -31,6 +31,8 @@ const CLOCK_WINDOW_MS = 60 * 60 * 1000;
 const PUSH_BATCH = 400;
 const PULL_BATCH = 1000;
 const SNAP_PAGE = 1500;
+/** كمية كل موقع تُحسب مرة كل دقيقة في المركز وتُشارَك بين كل الفروع */
+const AVAIL_TTL = 60 * 1000;
 const HQ_LOG_KEEP = 200000;
 
 /** ما يرفعه الفرع للمركز (يُحفظ في المركز منفصلاً لكل فرع) */
@@ -46,6 +48,12 @@ const LOCAL_FIELDS = {
 };
 /** القيمة الابتدائية للحقول الخاصة عند وصول سجل جديد من المركز */
 const LOCAL_DEFAULTS = { products: { stock: 0 }, customers: { balance: 0 } };
+/**
+ * حقول تبقى ملك الفرع، لكنها تُؤخذ من المركز عند **أول** وصول للصنف فقط.
+ * التكلفة مثالها: لو وصلت فارغة لحسب تقرير أرباح الفرع السعر كله ربحاً. تنزل مرة
+ * واحدة كقيمة ابتدائية، ثم يملكها الفرع ويعدّلها شراؤه المحلي ولا يلمسها المركز.
+ */
+const LOCAL_SEED = { products: ['cost'] };
 /**
  * حقول «إعدادات المنشأة» التي يديرها المركز وتنزل لكل الفروع: هوية المنشأة وضريبتها.
  * العنوان والهاتف والجوال والبريد والطابعات تبقى لكل فرع، لأنها تُطبع على فاتورته
@@ -171,7 +179,7 @@ function materialize(S, rows) {
 }
 
 /* ------------------------------ المركز (الخادم) ------------------------------ */
-function startHq({ store, cfg, appVersion, onBranchSeen }) {
+function startHq({ store, cfg, appVersion, onBranchSeen, onAvail }) {
   const S = store.sync;
   const MASTER_SET = new Set(MASTER);
   const UPLOAD_SET = new Set(UPLOAD);
@@ -223,17 +231,55 @@ function startHq({ store, cfg, appVersion, onBranchSeen }) {
         else after = rows[rows.length - 1].id;
       }
       const done = ci >= MASTER.length;
-      return { mode: 'snap', items, snap: done ? null : { ci, after, seq: cur.seq }, seq: Number(cur.seq) || 0, epoch: ep, collections: MASTER, full: !body.snap, settings: hqSettings() };
+      return { mode: 'snap', items, snap: done ? null : { ci, after, seq: cur.seq }, seq: Number(cur.seq) || 0, epoch: ep, collections: MASTER, full: !body.snap, settings: hqSettings(), avail: availFor(body) };
     }
     const rows = S.readLog(since, PULL_BATCH);
     const items = materialize(S, collapse(rows, MASTER_SET));
     const seq = rows.length ? rows[rows.length - 1].seq : since;
     S.branches.setPulled(branch.id, seq);
-    return { mode: 'inc', items, seq, more: rows.length === PULL_BATCH, epoch: ep, settings: hqSettings() };
+    return { mode: 'inc', items, seq, more: rows.length === PULL_BATCH, epoch: ep, settings: hqSettings(), avail: availFor(body) };
   }
   /** إعدادات المنشأة التي يديرها المركز — تُرسل مع كل استلام (حجمها ضئيل) */
   function hqSettings() {
     try { return pickHqSettings(store.net.getKv('companySettings')); } catch { return null; }
+  }
+
+  /**
+   * كمية كل صنف في كل موقع: المركز وكل فرع نشط.
+   * تنزل للفروع **للاطلاع فقط** فيرى الكاشير توافر الصنف في المواقع الأخرى، ولا تمسّ
+   * مخزون الفرع إطلاقاً — فالرفّ عند الفرع غير الرفّ عند المركز.
+   * تُحسب مرة كل دقيقة وتُشارَك بين كل الفروع، ولا تُرسل إلا إذا تغيّرت بصمتها.
+   */
+  let availCache = null;
+  /** لا تُرسل إلا عند تغيّرها: الفرع يبعث بصمته التي عنده */
+  function availFor(body) {
+    const a = availability();
+    return body && body.availStamp === a.stamp ? null : a.payload;
+  }
+  function availability() {
+    if (availCache && Date.now() - availCache.at < AVAIL_TTL) return availCache;
+    const locs = [{ id: 'hq', name: cfg.hq.name || 'المركز' }];
+    const maps = [];
+    const toMap = (rows) => {
+      const m = new Map();
+      for (const p of rows || []) { const q = Number(p && p.stock) || 0; if (q) m.set(String(p.id), q); }
+      return m;
+    };
+    try { maps.push(toMap(store.net.readCollection('products'))); } catch { maps.push(new Map()); }
+    for (const b of S.branches.list()) {
+      if (b.status !== 'active') continue;
+      locs.push({ id: b.id, name: b.name });
+      try { maps.push(toMap(S.branches.read(b.id, 'products'))); } catch { maps.push(new Map()); }
+    }
+    const ids = new Set();
+    for (const m of maps) for (const k of m.keys()) ids.add(k);
+    const qty = {};
+    for (const id of ids) qty[id] = maps.map((m) => m.get(id) || 0);
+    const stamp = crypto.createHash('sha1').update(JSON.stringify([locs, qty])).digest('base64url').slice(0, 16);
+    availCache = { at: Date.now(), stamp, payload: { stamp, locs, qty } };
+    // المركز يعرض السطر نفسه في شاشاته، فيحفظ ما حسبه عنده أيضاً
+    if (onAvail) { try { onAvail(availCache.payload); } catch (e) { console.error('[branches] avail hq', e); } }
+    return availCache;
   }
 
   function handle(branch, msg) {
@@ -269,6 +315,7 @@ function startHq({ store, cfg, appVersion, onBranchSeen }) {
     try { out = handle(branch, msg); } catch (e) { ok = false; err = errText(e); console.error('[branches] hq handle', e); }
     S.branches.touch(branch.id, { ip: meta.ip || '', version: String(msg.version || ''), info: msg.info && typeof msg.info === 'object' ? msg.info : undefined });
     if (onBranchSeen) onBranchSeen(branch.id);
+    if (msg.op === 'push') availCache = null; // وصل مخزون فرع: أعد الحساب
     if (Date.now() - lastPrune > 6 * 3600 * 1000) { lastPrune = Date.now(); try { S.pruneKeep(HQ_LOG_KEEP); } catch { /* */ } }
     return { status: 200, body: seal(key, { ts: Date.now(), ok, error: err, body: out }, `${branch.id}|res|${msg.nonce}`) };
   }
@@ -294,6 +341,8 @@ function startHq({ store, cfg, appVersion, onBranchSeen }) {
 
   return {
     processEnvelope,
+    /** تُستدعى عند تغيّر الأصناف حتى لا تُعرض كميات قديمة */
+    invalidateAvail: () => { availCache = null; },
     status: () => ({ listening, error, port: cfg.hq.port }),
     /** تغيّرت قائمة البيانات الرئيسية (تحديث للبرنامج): الفروع تعيد المزامنة الكاملة */
     resetEpoch: () => S.metaSet('hq.epoch', crypto.randomBytes(6).toString('hex')),
@@ -374,7 +423,7 @@ function createRelayLink({ relay, appVersion, processEnvelope, onStatus }) {
 }
 
 /* ------------------------------ الفرع (العميل) ------------------------------ */
-function createBranchAgent({ store, cfg, appVersion, deviceName, applyIncoming, applySettings, onStatus, infoForHq }) {
+function createBranchAgent({ store, cfg, appVersion, deviceName, applyIncoming, applySettings, applyAvail, onStatus, infoForHq }) {
   const S = store.sync;
   const B = cfg.branch;
   const key = deriveKey(B.secret, B.id);
@@ -455,10 +504,13 @@ function createBranchAgent({ store, cfg, appVersion, deviceName, applyIncoming, 
   async function download() {
     let got = 0;
     for (let guard = 0; guard < 10000; guard++) {
-      const body = { since: Number(S.metaGet('br.down', 0)) || 0, init: !!S.metaGet('br.init', false), epoch: S.metaGet('br.epoch', ''), snap: S.metaGet('br.snap', null) };
+      const body = { since: Number(S.metaGet('br.down', 0)) || 0, init: !!S.metaGet('br.init', false), epoch: S.metaGet('br.epoch', ''), snap: S.metaGet('br.snap', null), availStamp: S.metaGet('br.avail', '') };
       const r = await call('pull', body);
       if (r.items && r.items.length) { applyIncoming(r.items, { full: r.mode === 'snap' }); got += r.items.length; }
       if (r.settings && applySettings) { try { applySettings(r.settings); } catch (e) { console.error('[branches] settings', e); } }
+      if (r.avail && applyAvail) {
+        try { applyAvail(r.avail); S.metaSet('br.avail', String(r.avail.stamp || '')); } catch (e) { console.error('[branches] avail', e); }
+      }
       S.metaSet('br.epoch', r.epoch || '');
       if (r.mode === 'snap') {
         if (r.snap) { S.metaSet('br.snap', r.snap); continue; }
@@ -528,9 +580,12 @@ function createBranchAgent({ store, cfg, appVersion, deviceName, applyIncoming, 
 /** يدمج سجلاً وصل من المركز مع النسخة المحلية مع إبقاء حقول الفرع الخاصة */
 function mergeIncoming(collection, local, incoming) {
   const keep = LOCAL_FIELDS[collection] || [];
+  const seed = LOCAL_SEED[collection] || [];
   const out = { ...incoming };
   for (const k of keep) {
     if (local && Object.prototype.hasOwnProperty.call(local, k)) out[k] = local[k];
+    // صنف جديد على الفرع: قيمة المركز تبقى بذرةً للحقول المذكورة في LOCAL_SEED
+    else if (!local && seed.includes(k) && Object.prototype.hasOwnProperty.call(incoming, k)) continue;
     else delete out[k];
   }
   if (!local && LOCAL_DEFAULTS[collection]) Object.assign(out, LOCAL_DEFAULTS[collection]);
@@ -597,7 +652,14 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
     }
     const changed = S.setTracked(tracked);
     if (cfg.mode === 'hq') {
-      hq = startHq({ store, cfg, appVersion, onBranchSeen: () => emit('branches:changed', {}) });
+      hq = startHq({
+        store, cfg, appVersion,
+        onBranchSeen: () => emit('branches:changed', {}),
+        onAvail: (payload) => {
+          const cur = store.net.getKv('branchAvailability');
+          if (!cur || cur.stamp !== payload.stamp) network.applyExternal([{ t: 'kv', key: 'branchAvailability', value: payload }], 'hq');
+        },
+      });
       if (changed) hq.resetEpoch();
       if (cfg.hq.relay && cfg.hq.relay.url && cfg.hq.relay.hqId && cfg.hq.relay.hqKey) {
         relayLink = createRelayLink({
@@ -612,6 +674,10 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
         applyIncoming: (items) => {
           const ops = incomingToOps(store, items);
           if (ops.length) network.applyExternal(ops, 'hq');
+        },
+        /** كميات المواقع الأخرى — معلومة للاطلاع، لا تمسّ مخزون الفرع */
+        applyAvail: (payload) => {
+          network.applyExternal([{ t: 'kv', key: 'branchAvailability', value: payload }], 'hq');
         },
         /** هوية المنشأة وضريبتها من المركز، مع إبقاء عنوان الفرع وهاتفه وطابعاته */
         applySettings: (incoming) => {
@@ -630,6 +696,10 @@ function createBranchSync({ userDataDir, store, network, appVersion, deviceName,
       agent.start();
       const ns = network.netstore && network.netstore();
       if (ns) unsubscribe = ns.onChange((e) => { if (e.origin !== 'hq' && e.changes.some((c) => c.t === 'c' && UPLOAD.includes(c.name))) agent.nudge(); });
+    } else if (hq) {
+      // تغيّر أصناف المركز يُبطل كميات المواقع المحفوظة حتى لا تُعرض قديمة
+      const ns = network.netstore && network.netstore();
+      if (ns) unsubscribe = ns.onChange((e) => { if (e.changes.some((c) => c.t === 'c' && c.name === 'products')) hq.invalidateAvail(); });
     } else if (changed) {
       S.clearLog();
     }

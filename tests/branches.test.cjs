@@ -60,7 +60,9 @@ module.exports = async function () {
   assert.ok(r1.ok);
   const brAll = br.store.loadAll().collections;
   const p1 = brAll.products.find((p) => p.id === 'p1');
-  assert.strictEqual(p1.price, 10); assert.strictEqual(p1.stock, 0); assert.ok(!('cost' in p1), 'cost local');
+  assert.strictEqual(p1.price, 10); assert.strictEqual(p1.stock, 0);
+  // الكمية تبدأ صفراً (رفّ الفرع غير رفّ المركز)، والتكلفة تنزل بذرةً مرة واحدة ثم تصير ملك الفرع
+  assert.strictEqual(p1.cost, 6, 'cost seeded from HQ on first arrival');
   assert.strictEqual(brAll.productGroups[0].printerId, 'branch-kitchen', 'printerId stays local');
   assert.strictEqual(brAll.productGroups[0].nameAr, 'مشروبات');
   assert.ok(!brAll.invoices.find((i) => i.id === 'hqinv'), 'HQ invoices never go to branch');

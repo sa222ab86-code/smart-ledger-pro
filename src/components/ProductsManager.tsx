@@ -5,6 +5,7 @@ import { latinBarcodeKeyDown } from '../utils/docScan';
 import { generateInternalEan13, barcodeIssue } from '../utils/barcode';
 import { usePagedList, Pagination } from '../utils/usePagedList';
 import { useFitHeight } from '../utils/useFitHeight';
+import { usePersistentState, type Availability } from '../storage/persistence';
 import { 
   Package, Plus, Search, Tag, DollarSign, Barcode, Trash2, Edit, X, 
   AlertTriangle, AlertCircle, Layers, Boxes, Sparkles, FolderTree, ArrowRight, FileDown, Power, Split
@@ -85,6 +86,21 @@ export default function ProductsManager({
   barcodePrint
 }: ProductsManagerProps) {
   const [barcodeIds, setBarcodeIds] = useState<string[] | null>(openBarcode ? [] : null);
+  // كميات المواقع الأخرى كما ينزلها المركز — للاطلاع فقط، ومخزون هذا الجهاز لا يتأثر بها
+  const [availability] = usePersistentState<Availability | null>('branchAvailability', null);
+  const elsewhere = (id: string) => {
+    const row = availability?.qty?.[id];
+    if (!row || !availability?.locs?.length) return null;
+    const others = availability.locs
+      .map((l, i) => ({ name: l.name, qty: row[i] || 0 }))
+      .filter((x) => x.qty > 0);
+    if (!others.length) return null;
+    return (
+      <span className="text-[10px] text-slate-500 dark:text-slate-400 flex flex-wrap gap-x-2" title="الكمية في المواقع الأخرى حسب آخر مزامنة — للاطلاع فقط">
+        {others.map((o) => <span key={o.name}>{o.name}: <b className="font-mono text-slate-600 dark:text-slate-300">{o.qty}</b></span>)}
+      </span>
+    );
+  };
   const [activeTab, setActiveTab] = useState<'products' | 'groups' | 'bundles'>(initialTab);
   const [searchQuery, setSearchQuery] = useState('');
   // فلتر الباركود + تحديد أصناف لحذفها دفعة واحدة
@@ -883,6 +899,7 @@ export default function ProductsManager({
                                     {isOut && <AlertCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />}
                                     <span>{product.stock} قِطعة</span>
                                   </span>
+                                  {elsewhere(product.id)}
                                   <span className="text-[10px] text-slate-500 font-mono">
                                     الحد الأدنى: {threshold}
                                   </span>

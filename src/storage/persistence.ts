@@ -320,6 +320,8 @@ export const getNetInfo = () => netInfo;
 let branchCode = '';
 export const getBranchCode = () => branchCode;
 
+/** كميات الصنف في المواقع الأخرى، ينزلها المركز للفرع للاطلاع فقط */
+export interface Availability { stamp: string; locs: { id: string; name: string }[]; qty: Record<string, number[]> }
 /** المجموعات التي يرفعها الفرع ويقرأها المركز في تقاريره الموحّدة */
 export const BRANCH_REPORT_COLLECTIONS = ['invoices', 'products', 'purchases', 'purchaseReturns', 'cashMovements', 'zReports'] as const;
 export interface BranchBundle {
